@@ -120,25 +120,33 @@ function DayColumnView(props: { day: DayColumn; icons: Icons }) {
   )
 }
 
-/** E: Warnzeile nur bei Unwetter. Text links, Linie in Warnfarbe bis zum Rand. */
-function WarningLine(props: { warning: WarningRow }) {
-  const color = colors.warning[props.warning.level]
+/**
+ * Trenner zwischen Stunden und Tagen: ein feiner Strich über die ganze Breite.
+ * E: Bei Unwetter wird er zur Warnzeile in Warnfarbe mit Text. Sind die Daten
+ * alt, steht der Stand vorne am Strich.
+ */
+function Divider(props: { warning: WarningRow | null; staleHint: string | null }) {
+  const { warning, staleHint } = props
+  const color = warning === null ? colors.divider : colors.warning[warning.level]
+  const label = warning?.text ?? staleHint
   return (
-    <HStack spacing={4} frame={{ width: layout.rowWidth }}>
-      <Image systemName="exclamationmark.triangle.fill" font={fonts.warning} foregroundStyle={color} />
-      <Text font={fonts.warning} fontWeight="bold" foregroundStyle={color} lineLimit={1} minScaleFactor={0.8}>
-        {props.warning.text}
-      </Text>
+    <HStack spacing={4} frame={{ width: layout.rowWidth, height: layout.dividerHeight }}>
+      {warning === null ? null : (
+        <Image systemName="exclamationmark.triangle.fill" font={fonts.divider} foregroundStyle={color} />
+      )}
+      {label === null ? null : (
+        <Text
+          font={fonts.divider}
+          fontWeight="bold"
+          foregroundStyle={warning === null ? colors.textDim : color}
+          lineLimit={1}
+          minScaleFactor={0.8}
+        >
+          {label}
+        </Text>
+      )}
       <VStack frame={{ height: 1, maxWidth: "infinity" }} background={color} />
     </HStack>
-  )
-}
-
-function StaleHint(props: { text: string }) {
-  return (
-    <Text font={fonts.label} foregroundStyle={colors.textDim}>
-      {props.text}
-    </Text>
   )
 }
 
@@ -158,11 +166,7 @@ export function WeatherWidget(props: { model: WidgetModel; icons: Icons }) {
           <SlotColumn slot={slot} icons={icons} />
         ))}
       </HStack>
-      {model.warning !== null ? (
-        <WarningLine warning={model.warning} />
-      ) : model.staleHint !== null ? (
-        <StaleHint text={model.staleHint} />
-      ) : null}
+      <Divider warning={model.warning} staleHint={model.staleHint} />
       <HStack spacing={0}>
         {model.days.map((day) => (
           <DayColumnView day={day} icons={icons} />

@@ -24,7 +24,10 @@ const warning: Record<WarningLevel, string> = {
 
 export const theme = {
   colors: {
-    background: "#1c1c1e",
+    /** iOS-Dunkelgrau für Karten, etwas heller als das bisherige #1c1c1e */
+    background: "#2c2c2e",
+    /** Strich zwischen Stunden und Tagen, wie im bisherigen Script */
+    divider: "rgba(255,255,255,0.28)",
     text: "#ffffff",
     textDim: "rgba(255,255,255,0.65)",
     rain: "#5cb5ff",
@@ -46,6 +49,7 @@ export const theme = {
     slotPaddingVertical: 2,
     widgetPaddingVertical: 8,
     rowSpacing: 3,
+    dividerHeight: 10,
     sunsetDotSize: 4,
   },
   fonts: {
@@ -56,6 +60,7 @@ export const theme = {
     /** B: Bewertung im Sonnen-Slot, vorher 7 pt */
     qualityLabel: 8,
     sunGlyph: 7,
-    warning: 8,
+    /** Text am Trenner (Warnung oder Datenstand) */
+    divider: 8,
   },
 } as const

@@ -7,7 +7,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 | Meilenstein | Inhalt | Status |
 |---|---|---|
 | M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
-| M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.6) |
+| M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.7) |
 | M3 | Look-Feinschliff | als Nächstes |
 
 ## Was das Widget zeigt
@@ -15,8 +15,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 - **Stundenreihe:** JETZT plus die nächsten Stunden mit meteoblue-Icon (Tag/Nacht), Temperatur, gefühlter Temperatur und Regen.
 - **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung. Ohne Sunsethue berechnet das Widget die Uhrzeit selbst.
 - **Tagesreihe:** HEUTE plus 4 Tage mit Icon, Max/Min und Regen. Für heute bis übermorgen gibt es einen Punkt in der Farbe der Sonnenuntergangs-Qualität.
-- **Warnzeile:** nur bei amtlichen DWD-Unwettern ab Stufe 3.
-- **Hinweis** „Stand …“, wenn die Daten älter als 12 Stunden sind.
+- **Trenner:** feiner Strich zwischen Stunden und Tagen. Bei amtlichen DWD-Unwettern ab Stufe 3 wird er zur farbigen Warnzeile mit Text. Sind die Daten älter als 12 Stunden, steht „Stand …“ vorne am Strich.
 - **Antippen** öffnet die meteoblue-App am Ort der Daten.
 
 ## Wie es aktuell bleibt
