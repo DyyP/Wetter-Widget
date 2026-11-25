@@ -10,6 +10,7 @@ import { refresh, reportErrors } from "./data/refresh"
 import { loadAlerts, loadForecast, loadSunEvents, saveWidgetRun } from "./platform/cache"
 import { renderedIcons } from "./platform/icons"
 import { readSecret } from "./platform/secrets"
+import { gridFor } from "./ui/theme"
 import { MessageWidget, WeatherWidget } from "./ui/WeatherWidget"
 
 /** Nach einem Hinweis statt Wetter: in 15 Minuten erneut versuchen */
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
   }
 
   await saveWidgetRun({ time: now, result: "Wetter", errors })
-  Widget.present(<WeatherWidget model={result.model} icons={icons} />, {
+  Widget.present(<WeatherWidget model={result.model} icons={icons} grid={gridFor(Widget.displaySize.width)} />, {
     policy: "after",
     date: new Date(result.model.nextRefresh + AFTER_HOUR_MS),
   })

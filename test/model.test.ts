@@ -78,6 +78,21 @@ describe("Stunden-Slots", () => {
   })
 })
 
+describe("Regenzeilen", () => {
+  it("erscheinen nur, wenn es in der Reihe regnet oder ein Sonnen-Slot da ist", () => {
+    // 15:20: Sonnenuntergang 16:0x sichtbar, Regen erst ab 17 Uhr in der Reihe
+    expect(model()).toMatchObject({ hourRainRow: true, dayRainRow: true })
+    // 21:05: kein Sonnen-Slot, kein Regen in den nächsten Stunden
+    expect(model({ now: local(25, 21, 5) }).hourRainRow).toBe(false)
+  })
+
+  it("entfallen in der Tagesreihe ohne Regen", () => {
+    const dry = forecast()
+    dry.daily = dry.daily.map((d) => ({ ...d, precipitation: 0 }))
+    expect(model({ forecast: dry }).dayRainRow).toBe(false)
+  })
+})
+
 describe("Tage", () => {
   it("zeigt 5 Tage ab heute mit deutschen Namen", () => {
     const m = model({ sunEvents: [sunset("2026-11-26", local(26, 15, 56), 0.3)] })

@@ -69,6 +69,13 @@ export interface WarningRow {
 export interface WidgetModel {
   slots: Slot[]
   days: DayColumn[]
+  /**
+   * Ob die Stundenreihe ihre 4. Zeile braucht: bei Regen oder wenn ein
+   * Sonnen-Slot da ist (dessen Bewertung steht in dieser Zeile).
+   */
+  hourRainRow: boolean
+  /** Ob die Tagesreihe eine Regenzeile braucht */
+  dayRainRow: boolean
   warning: WarningRow | null
   /** "Stand gestern 17:02", nur wenn die Daten älter als 12 Stunden sind */
   staleHint: string | null
@@ -108,11 +115,15 @@ export function buildModel(input: ModelInput): ModelResult {
   const warning = warningAlert === undefined ? null : { text: alertText(warningAlert, now), level: warningAlert.level }
   const stale = input.fetchedAt !== null && now - input.fetchedAt > STALE_AFTER_MS ? input.fetchedAt : null
 
+  const visibleSlots = slots.slice(0, SLOT_COUNT)
+  const days = dayColumns(forecast, input.sunEvents, now)
   return {
     ok: true,
     model: {
-      slots: slots.slice(0, SLOT_COUNT),
-      days: dayColumns(forecast, input.sunEvents, now),
+      slots: visibleSlots,
+      days,
+      hourRainRow: visibleSlots.some((slot) => slot.kind === "sun" || slot.rain !== null),
+      dayRainRow: days.some((day) => day.rain !== null),
       warning,
       staleHint: stale === null ? null : `Stand ${formatRelativeDay(stale, now)}`,
       tapUrl: meteoblueWeekUrl({ lat: forecast.latitude, lon: forecast.longitude }),

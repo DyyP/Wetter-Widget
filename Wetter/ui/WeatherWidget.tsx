@@ -1,15 +1,22 @@
 /** Das mittlere Wetter-Widget im Look deines bisherigen Scripts. */
 
 import { Circle, HStack, Image, Spacer, Text, VStack } from "scripting"
-import type { DayColumn, HourSlot, Slot, SunSlot, WarningRow, WidgetModel } from "../core/model"
+import type { DayColumn, HourSlot, SunSlot, WarningRow, WidgetModel } from "../core/model"
 import { PICTO_ASPECT } from "../core/picto"
-import { theme } from "./theme"
+import { theme, type Grid } from "./theme"
 
 const { colors, layout, fonts } = theme
 const DEG = "°"
 
 /** Icon-Name → Pfad des vorgerenderten PNG */
 type Icons = Map<string, string>
+
+interface ColumnProps {
+  grid: Grid
+  icons: Icons
+  /** Ob die Reihe eine 4. Zeile hat (Regen bzw. Sonnen-Bewertung) */
+  extraRow: boolean
+}
 
 function PictoIcon(props: { name: string; width: number; icons: Icons }) {
   const height = Math.round(props.width * PICTO_ASPECT * 10) / 10
@@ -22,19 +29,27 @@ function slotBackground(color: string) {
   return { style: color, shape: { type: "rect" as const, cornerRadius: layout.slotCornerRadius } }
 }
 
-function HourColumn(props: { slot: HourSlot; icons: Icons }) {
-  const { slot } = props
+function RainText(props: { value: string | null }) {
+  return (
+    <Text font={fonts.rain} fontWeight="bold" foregroundStyle={colors.rain}>
+      {props.value ?? " "}
+    </Text>
+  )
+}
+
+function HourColumn(props: ColumnProps & { slot: HourSlot }) {
+  const { slot, grid } = props
   return (
     <VStack
       spacing={0}
-      frame={{ width: layout.hourColumnWidth }}
+      frame={{ width: grid.hourColumnWidth }}
       padding={{ vertical: layout.slotPaddingVertical }}
       {...(slot.isNow ? { background: slotBackground(colors.nowBackground) } : {})}
     >
       <Text font={fonts.label} fontWeight="bold" foregroundStyle={colors.textDim}>
         {slot.label}
       </Text>
-      <PictoIcon name={slot.icon} width={layout.hourIconWidth} icons={props.icons} />
+      <PictoIcon name={slot.icon} width={grid.hourIconWidth} icons={props.icons} />
       <HStack spacing={1}>
         <Text font={fonts.temperature} fontWeight="bold" foregroundStyle={colors.text}>
           {`${slot.temperature}${DEG}`}
@@ -43,34 +58,28 @@ function HourColumn(props: { slot: HourSlot; icons: Icons }) {
           {`${slot.feltTemperature}${DEG}`}
         </Text>
       </HStack>
-      <Text font={fonts.rain} fontWeight="bold" foregroundStyle={colors.rain}>
-        {slot.rain ?? " "}
-      </Text>
+      {props.extraRow ? <RainText value={slot.rain} /> : null}
     </VStack>
   )
 }
 
-function SunColumn(props: { slot: SunSlot; icons: Icons }) {
-  const { slot } = props
+function SunColumn(props: ColumnProps & { slot: SunSlot }) {
+  const { slot, grid } = props
   const accent = slot.level === null ? colors.textDim : colors.quality[slot.level]
   return (
     <VStack
       spacing={0}
-      frame={{ width: layout.hourColumnWidth }}
+      frame={{ width: grid.hourColumnWidth }}
       padding={{ vertical: layout.slotPaddingVertical }}
       background={slotBackground(colors.sunBackground)}
     >
       <HStack spacing={2}>
-        <Image
-          systemName={slot.type === "sunset" ? "sunset.fill" : "sunrise.fill"}
-          font={fonts.sunGlyph}
-          foregroundStyle={accent}
-        />
+        <Image systemName={slot.type === "sunset" ? "sunset.fill" : "sunrise.fill"} font={fonts.sunGlyph} foregroundStyle={accent} />
         <Text font={fonts.label} fontWeight="bold" foregroundStyle={colors.textDim}>
           {slot.label}
         </Text>
       </HStack>
-      <PictoIcon name={slot.icon} width={layout.hourIconWidth} icons={props.icons} />
+      <PictoIcon name={slot.icon} width={grid.hourIconWidth} icons={props.icons} />
       <Text font={fonts.temperature} fontWeight="bold" foregroundStyle={accent}>
         {slot.quality === null ? "–" : `${Math.round(slot.quality * 100)}%`}
       </Text>
@@ -81,30 +90,19 @@ function SunColumn(props: { slot: SunSlot; icons: Icons }) {
   )
 }
 
-function SlotColumn(props: { slot: Slot; icons: Icons }) {
-  return props.slot.kind === "hour" ? (
-    <HourColumn slot={props.slot} icons={props.icons} />
-  ) : (
-    <SunColumn slot={props.slot} icons={props.icons} />
-  )
-}
-
-function DayColumnView(props: { day: DayColumn; icons: Icons }) {
-  const { day } = props
+function DayColumnView(props: ColumnProps & { day: DayColumn }) {
+  const { day, grid } = props
   return (
-    <VStack spacing={0} frame={{ width: layout.dayColumnWidth }}>
+    <VStack spacing={0} frame={{ width: grid.dayColumnWidth }}>
       <HStack spacing={3}>
         <Text font={fonts.label} fontWeight="bold" foregroundStyle={colors.textDim}>
           {day.label}
         </Text>
         {day.sunsetLevel === null ? null : (
-          <Circle
-            fill={colors.quality[day.sunsetLevel]}
-            frame={{ width: layout.sunsetDotSize, height: layout.sunsetDotSize }}
-          />
+          <Circle fill={colors.quality[day.sunsetLevel]} frame={{ width: layout.sunsetDotSize, height: layout.sunsetDotSize }} />
         )}
       </HStack>
-      <PictoIcon name={day.icon} width={layout.dayIconWidth} icons={props.icons} />
+      <PictoIcon name={day.icon} width={grid.dayIconWidth} icons={props.icons} />
       <HStack spacing={2}>
         <Text font={fonts.temperature} fontWeight="bold" foregroundStyle={colors.text}>
           {`${day.max}${DEG}`}
@@ -113,9 +111,7 @@ function DayColumnView(props: { day: DayColumn; icons: Icons }) {
           {`${day.min}${DEG}`}
         </Text>
       </HStack>
-      <Text font={fonts.rain} fontWeight="bold" foregroundStyle={colors.rain}>
-        {day.rain ?? " "}
-      </Text>
+      {props.extraRow ? <RainText value={day.rain} /> : null}
     </VStack>
   )
 }
@@ -125,23 +121,15 @@ function DayColumnView(props: { day: DayColumn; icons: Icons }) {
  * E: Bei Unwetter wird er zur Warnzeile in Warnfarbe mit Text. Sind die Daten
  * alt, steht der Stand vorne am Strich.
  */
-function Divider(props: { warning: WarningRow | null; staleHint: string | null }) {
+function Divider(props: { width: number; warning: WarningRow | null; staleHint: string | null }) {
   const { warning, staleHint } = props
   const color = warning === null ? colors.divider : colors.warning[warning.level]
   const label = warning?.text ?? staleHint
   return (
-    <HStack spacing={4} frame={{ width: layout.rowWidth, height: layout.dividerHeight }}>
-      {warning === null ? null : (
-        <Image systemName="exclamationmark.triangle.fill" font={fonts.divider} foregroundStyle={color} />
-      )}
+    <HStack spacing={4} frame={{ width: props.width, height: layout.dividerHeight }}>
+      {warning === null ? null : <Image systemName="exclamationmark.triangle.fill" font={fonts.divider} foregroundStyle={color} />}
       {label === null ? null : (
-        <Text
-          font={fonts.divider}
-          fontWeight="bold"
-          foregroundStyle={warning === null ? colors.textDim : color}
-          lineLimit={1}
-          minScaleFactor={0.8}
-        >
+        <Text font={fonts.divider} fontWeight="bold" foregroundStyle={warning === null ? colors.textDim : color} lineLimit={1} minScaleFactor={0.8}>
           {label}
         </Text>
       )}
@@ -150,8 +138,8 @@ function Divider(props: { warning: WarningRow | null; staleHint: string | null }
   )
 }
 
-export function WeatherWidget(props: { model: WidgetModel; icons: Icons }) {
-  const { model, icons } = props
+export function WeatherWidget(props: { model: WidgetModel; icons: Icons; grid: Grid }) {
+  const { model, icons, grid } = props
   return (
     <VStack
       spacing={layout.rowSpacing}
@@ -162,14 +150,18 @@ export function WeatherWidget(props: { model: WidgetModel; icons: Icons }) {
     >
       <Spacer minLength={0} />
       <HStack spacing={0}>
-        {model.slots.map((slot) => (
-          <SlotColumn slot={slot} icons={icons} />
-        ))}
+        {model.slots.map((slot) =>
+          slot.kind === "hour" ? (
+            <HourColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
+          ) : (
+            <SunColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
+          ),
+        )}
       </HStack>
-      <Divider warning={model.warning} staleHint={model.staleHint} />
+      <Divider width={grid.rowWidth} warning={model.warning} staleHint={model.staleHint} />
       <HStack spacing={0}>
         {model.days.map((day) => (
-          <DayColumnView day={day} icons={icons} />
+          <DayColumnView day={day} grid={grid} icons={icons} extraRow={model.dayRainRow} />
         ))}
       </HStack>
       <Spacer minLength={0} />

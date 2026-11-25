@@ -8,7 +8,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 |---|---|---|
 | M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
 | M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.7) |
-| M3 | Look-Feinschliff | als Nächstes |
+| M3 | Look-Feinschliff: Strich, Hintergrund, Regenzeilen nur bei Bedarf, volle Breite | läuft (0.2.8) |
 
 ## Was das Widget zeigt
 

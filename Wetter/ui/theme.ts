@@ -37,21 +37,17 @@ export const theme = {
     warning,
   },
   layout: {
-    /** Gesamtbreite beider Reihen (A: bündiges Raster) */
-    rowWidth: 312,
-    /** 6 Spalten à 52 pt */
-    hourColumnWidth: 312 / 6,
-    /** 5 Spalten à 62,4 pt */
-    dayColumnWidth: 312 / 5,
-    hourIconWidth: 36,
-    dayIconWidth: 30,
+    /** Abstand der Reihen zum linken und rechten Widget-Rand */
+    sideMargin: 6,
+    /** Innenabstand oben und unten */
+    widgetPaddingVertical: 6,
     slotCornerRadius: 8,
     slotPaddingVertical: 2,
-    widgetPaddingVertical: 8,
     rowSpacing: 3,
     dividerHeight: 10,
     sunsetDotSize: 4,
   },
+
   fonts: {
     label: 8,
     temperature: 11,
@@ -64,3 +60,31 @@ export const theme = {
     divider: 8,
   },
 } as const
+
+/**
+ * Raster des bisherigen Scripts: 6 Stunden à 52 pt und 5 Tage à 62,4 pt
+ * auf 312 pt Breite (A: bündig), Icons 36 und 30 pt breit. Auf breiteren
+ * Widgets wächst alles im selben Verhältnis.
+ */
+const BASE = { rowWidth: 312, hourIconWidth: 36, dayIconWidth: 30 }
+
+export interface Grid {
+  rowWidth: number
+  hourColumnWidth: number
+  dayColumnWidth: number
+  hourIconWidth: number
+  dayIconWidth: number
+}
+
+/** Raster für die tatsächliche Widget-Breite in pt */
+export function gridFor(widgetWidth: number): Grid {
+  const rowWidth = widgetWidth > 0 ? Math.max(BASE.rowWidth, widgetWidth - 2 * theme.layout.sideMargin) : BASE.rowWidth
+  const scale = rowWidth / BASE.rowWidth
+  return {
+    rowWidth,
+    hourColumnWidth: rowWidth / 6,
+    dayColumnWidth: rowWidth / 5,
+    hourIconWidth: BASE.hourIconWidth * scale,
+    dayIconWidth: BASE.dayIconWidth * scale,
+  }
+}

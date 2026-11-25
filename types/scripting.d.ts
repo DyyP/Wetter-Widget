@@ -107,6 +107,8 @@ declare module "scripting" {
 
   class Widget {
     static readonly family: WidgetFamily
+    /** Tatsächliche Größe des Widgets in pt */
+    static readonly displaySize: { width: number; height: number }
     /** Nach dem Aufruf läuft im Widget kein weiterer Code */
     static present(element: VirtualNode, reloadPolicy?: WidgetReloadPolicy): void
     /** Nur in der App: rendert widget.tsx als Vorschau */
