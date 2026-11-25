@@ -1,6 +1,6 @@
 {
   "name": "Wetter",
-  "version": "0.2.8",
+  "version": "1.0.0",
   "icon": "cloud.sun.fill",
   "color": "#1c76c9",
   "description": "Wetter-Widget mit meteoblue, Sunsethue und DWD-Warnungen",

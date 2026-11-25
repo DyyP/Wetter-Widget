@@ -24,13 +24,15 @@ const warning: Record<WarningLevel, string> = {
 
 export const theme = {
   colors: {
-    /** iOS-Dunkelgrau für Karten, etwas heller als das bisherige #1c1c1e */
-    background: "#2c2c2e",
+    /** Zwischen dem bisherigen #1c1c1e und dem iOS-Kartengrau #2c2c2e */
+    background: "#242426",
     /** Strich zwischen Stunden und Tagen, wie im bisherigen Script */
     divider: "rgba(255,255,255,0.28)",
     text: "#ffffff",
     textDim: "rgba(255,255,255,0.65)",
     rain: "#5cb5ff",
+    /** Hinweis am Trenner, der ein Eingreifen braucht (meteoblue-Key prüfen) */
+    notice: "#ff9f0a",
     nowBackground: "rgba(255,255,255,0.07)",
     sunBackground: "rgba(36,24,0,0.9)",
     quality,

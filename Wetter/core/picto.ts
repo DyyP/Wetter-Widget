@@ -9,13 +9,13 @@
 
 import { pad2 } from "./format"
 
-export const PICTO_BASE_URL = "https://static.meteoblue.com/assets/images/picto"
+const PICTO_BASE_URL = "https://static.meteoblue.com/assets/images/picto"
 
 /** Seitenverhältnis Höhe/Breite der meteoblue-Grafiken (480 × 420) */
 export const PICTO_ASPECT = 420 / 480
 
-export const HOURLY_CODES = 35
-export const DAILY_CODES = 17
+const HOURLY_CODES = 35
+const DAILY_CODES = 17
 
 export function isHourlyPictocode(code: number): boolean {
   return Number.isInteger(code) && code >= 1 && code <= HOURLY_CODES

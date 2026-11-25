@@ -15,7 +15,7 @@ export async function refreshNow(): Promise<void> {
     cancelLabel: "Abbrechen",
   })
   if (!confirmed) return
-  const [report, icons] = await Promise.all([refresh(Date.now(), { manual: true, inWidget: false }), prepareIcons()])
+  const [{ report }, icons] = await Promise.all([refresh(Date.now(), "manual", "app"), prepareIcons()])
   Widget.reloadAll()
   await Dialog.alert({ title: "Aktualisiert", message: `${describe(report)}\nIcons: ${icons.ready} von ${icons.total}` })
 }

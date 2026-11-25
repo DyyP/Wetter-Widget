@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Alert } from "../Wetter/core/dwd"
 import type { Forecast } from "../Wetter/core/meteoblue"
-import { buildModel, formatRain, meteoblueWeekUrl, modelIconNames, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
+import { buildModel, formatRain, modelIconNames, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
 import type { SunEvent } from "../Wetter/core/sunsethue"
 
 // Testzeitzone Europe/Berlin, 25.11.2026 ist ein Mittwoch. Ort: Berlin.
@@ -33,7 +33,14 @@ function sunset(date: string, time: number, quality: number): SunEvent {
   return { type: "sunset", date, time, quality, qualityText: "Good" }
 }
 
-const base = { now: NOW, forecast: forecast(), fetchedAt: local(25, 12, 5), sunEvents: [] as SunEvent[], alerts: [] as Alert[] }
+const base = {
+  now: NOW,
+  forecast: forecast(),
+  fetchedAt: local(25, 12, 5),
+  sunEvents: [] as SunEvent[],
+  alerts: [] as Alert[],
+  keyRejected: false,
+}
 
 function model(overrides: Partial<typeof base> = {}) {
   const result = buildModel({ ...base, ...overrides })
@@ -115,9 +122,21 @@ describe("Warnung und Hinweise", () => {
     expect(model({ alerts: [{ ...orkan, level: 2 }] }).warning).toBeNull()
   })
 
-  it("weist auf alte Daten hin", () => {
-    expect(model().staleHint).toBeNull()
-    expect(model({ fetchedAt: local(24, 17, 2) }).staleHint).toBe("Stand gestern 17:02")
+  it("weist auf alte Daten erst hin, wenn ein Zeitfenster verpasst wurde", () => {
+    expect(model().notice).toBeNull()
+    // Normale Nacht: 17-Uhr-Daten am nächsten Morgen vor dem 6-Uhr-Abruf sind kein Hinweis wert
+    expect(model({ now: local(26, 5, 50), fetchedAt: local(25, 17, 2) }).notice).toBeNull()
+    expect(model({ now: local(26, 9, 30), fetchedAt: local(25, 17, 2) }).notice).toEqual({ kind: "stale", text: "Stand gestern 17:02" })
+  })
+
+  it("bittet um einen neuen Key, wenn meteoblue ihn ablehnt", () => {
+    expect(model({ keyRejected: true }).notice).toEqual({ kind: "key", text: "meteoblue-Key prüfen · Stand heute 12:05" })
+  })
+
+  it("liefert Warnung und Hinweis getrennt, die Ansicht zeigt die Warnung zuerst", () => {
+    const m = model({ alerts: [orkan], keyRejected: true })
+    expect(m.warning?.text).toBe("ORKANBÖEN bis 18:00")
+    expect(m.notice?.kind).toBe("key")
   })
 
   it("listet die benötigten Icons", () => {
@@ -126,10 +145,8 @@ describe("Warnung und Hinweise", () => {
     expect(modelIconNames(m)).toContain("01_iday.svg")
   })
 
-  it("verlinkt die meteoblue-App und plant die nächste volle Stunde", () => {
-    const m = model()
-    expect(m.tapUrl).toBe("https://www.meteoblue.com/de/weather/week/52.520N13.405E")
-    expect(m.nextRefresh).toBe(local(25, 16))
+  it("plant die nächste volle Stunde", () => {
+    expect(model().nextRefresh).toBe(local(25, 16))
   })
 })
 
@@ -150,7 +167,4 @@ describe("Hilfsfunktionen", () => {
     expect(roundTemperature(-2.6)).toBe(-3)
   })
 
-  it("schreibt Koordinaten für die Südhalbkugel und den Westen", () => {
-    expect(meteoblueWeekUrl({ lat: -33.8688, lon: -151.2093 })).toBe("https://www.meteoblue.com/de/weather/week/33.869S151.209W")
-  })
 })

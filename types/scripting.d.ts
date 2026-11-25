@@ -67,7 +67,8 @@ declare module "scripting" {
     fontWeight?: FontWeight
     lineLimit?: number
     minScaleFactor?: number
-    widgetURL?: string
+    /** Darstellung von Buttons; "plain" zeigt nur den Inhalt */
+    buttonStyle?: "automatic" | "bordered" | "borderedProminent" | "borderless" | "plain"
     /** Hintergrund, den iOS im getönten oder klaren Modus automatisch weglässt */
     widgetBackground?: Color
   }
@@ -90,8 +91,29 @@ declare module "scripting" {
   function Text(props: CommonViewProps): VirtualNode
   function Image(props: ImageProps): VirtualNode
   function Circle(props: CommonViewProps & { fill?: Color }): VirtualNode
+  function Rectangle(props: CommonViewProps & { fill?: Color }): VirtualNode
+  /** Im Widget löst ein Tipp die AppIntent aus (Hintergrund, app_intents.tsx) */
+  function Button(props: CommonViewProps & { intent: AppIntent<unknown> }): VirtualNode
   /** Nur in der App verwenden: Im Widget sprengt das Umrechnen das Speicherlimit */
   function SVG(props: CommonViewProps & { filePath: string; resizable?: boolean }): VirtualNode
+
+  interface AppIntent<T> {
+    readonly name: string
+    readonly params: T
+  }
+
+  enum AppIntentProtocol {
+    AppIntent = 0,
+  }
+
+  /** AppIntents müssen in app_intents.tsx registriert werden */
+  class AppIntentManager {
+    static register<T = undefined>(options: {
+      name: string
+      protocol: AppIntentProtocol
+      perform: (params: T) => Promise<void>
+    }): (params: T) => AppIntent<T>
+  }
 
   type WidgetFamily =
     | "systemSmall"
@@ -172,6 +194,8 @@ declare namespace Dialog {
 declare namespace FileManager {
   /** Für App und Widget gemeinsam, nicht in der Dateien-App sichtbar */
   const appGroupDocumentsDirectory: string
+  /** Temporärer Ordner, den iOS bei Bedarf leert */
+  const temporaryDirectory: string
   function exists(path: string): Promise<boolean>
   function createDirectory(path: string, recursive?: boolean): Promise<void>
   function readAsString(path: string): Promise<string>

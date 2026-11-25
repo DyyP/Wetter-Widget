@@ -7,6 +7,9 @@ import {
   decideSunsethue,
   decideWarnings,
   lastSlotStart,
+  longestSlotGap,
+  meteoblueFailure,
+  meteoblueKeyRejected,
   meteoblueSuccess,
   sourceFailure,
   type Context,
@@ -18,7 +21,7 @@ const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, ho
 const HOME = { lat: 49.0, lon: 8.4 }
 const HOUR = 3_600_000
 
-const ctx = (now: number, extra: Partial<Context> = {}): Context => ({ now, here: HOME, hasData: true, manual: false, ...extra })
+const ctx = (now: number, extra: Partial<Context> = {}): Context => ({ now, here: HOME, hasData: true, trigger: "schedule", ...extra })
 const state = (partial: Partial<MeteoblueState>): MeteoblueState => ({ ...EMPTY_METEOBLUE, location: HOME, ...partial })
 /** Zustand nach einem erfolgreichen Abruf zu `time` */
 const fetchedAt = (time: number, calls: number[] = [time]) => state({ lastSuccess: time, billedCalls: calls })
@@ -29,6 +32,13 @@ describe("lastSlotStart", () => {
     expect(lastSlotStart(at(25, 12, 0), [6, 12, 17])).toBe(at(25, 12))
     expect(lastSlotStart(at(25, 23, 0), [6, 12, 17])).toBe(at(25, 17))
     expect(lastSlotStart(at(25, 5, 59), [6, 12, 17])).toBe(at(24, 17))
+  })
+})
+
+describe("longestSlotGap", () => {
+  it("ist bei 06/12/17 Uhr die Nacht von 17 bis 6 Uhr", () => {
+    expect(longestSlotGap([6, 12, 17])).toBe(13 * HOUR)
+    expect(longestSlotGap([17, 6, 12])).toBe(13 * HOUR)
   })
 })
 
@@ -67,17 +77,50 @@ describe("decideMeteoblue", () => {
     expect(decideMeteoblue(exhausted, ctx(at(25, 7), { here: { lat: 50, lon: 8.4 } }))).toEqual({ fetch: false, reason: "budget" })
   })
 
-  it("wartet nach einem Fehlversuch", () => {
-    const failed = sourceFailure(fetchedAt(at(25, 6)), at(25, 12, 1))
+  it("wartet nach einem vorübergehenden Fehler 20 Minuten", () => {
+    const failed = meteoblueFailure(fetchedAt(at(25, 6)), at(25, 12, 1), "network", "Zeitüberschreitung")
     expect(decideMeteoblue(failed, ctx(at(25, 12, 10)))).toEqual({ fetch: false, reason: "retry-wait" })
     expect(decideMeteoblue(failed, ctx(at(25, 12, 30)))).toEqual({ fetch: true, reason: "slot" })
   })
 
+  it("versucht es nach abgelehntem Key erst im nächsten Zeitfenster wieder", () => {
+    const rejected = meteoblueFailure(fetchedAt(at(25, 6)), at(25, 12, 1), "access", "API key expired")
+    expect(decideMeteoblue(rejected, ctx(at(25, 16, 59)))).toEqual({ fetch: false, reason: "retry-wait" })
+    expect(decideMeteoblue(rejected, ctx(at(25, 16, 59), { trigger: "tap" }))).toEqual({ fetch: false, reason: "retry-wait" })
+    expect(decideMeteoblue(rejected, ctx(at(25, 17, 1)))).toEqual({ fetch: true, reason: "slot" })
+    // Nach einem neuen Key holt „Jetzt aktualisieren“ sofort
+    expect(decideMeteoblue(rejected, ctx(at(25, 13), { trigger: "manual" }))).toEqual({ fetch: true, reason: "manual" })
+  })
+
+  it("ruft auch ohne Daten nur im Rahmen des Budgets ab", () => {
+    const calls = Array.from({ length: METEOBLUE_PLAN.weeklyBudget }, (_, i) => at(25, 6) - (i + 1) * 6 * HOUR)
+    const exhausted = state({ lastSuccess: at(24, 17), billedCalls: calls })
+    expect(decideMeteoblue(exhausted, ctx(at(25, 7), { hasData: false }))).toEqual({ fetch: false, reason: "budget" })
+  })
+
+  it("holt beim Antippen Daten, die älter als 3 Stunden sind", () => {
+    const fresh = fetchedAt(at(25, 12, 5))
+    expect(decideMeteoblue(fresh, ctx(at(25, 14), { trigger: "tap" }))).toEqual({ fetch: false, reason: "up-to-date" })
+    expect(decideMeteoblue(fresh, ctx(at(25, 15, 10), { trigger: "tap" }))).toEqual({ fetch: true, reason: "tap" })
+    // ohne Antippen wartet der normale Durchlauf bis 17 Uhr
+    expect(decideMeteoblue(fresh, ctx(at(25, 15, 10)))).toEqual({ fetch: false, reason: "up-to-date" })
+  })
+
+  it("verbraucht beim Antippen kein Budget über die Grenze hinaus", () => {
+    const calls = Array.from({ length: METEOBLUE_PLAN.weeklyBudget }, (_, i) => at(25, 6) - (i + 1) * 6 * HOUR)
+    const exhausted = state({ lastSuccess: at(25, 6), billedCalls: calls })
+    expect(decideMeteoblue(exhausted, ctx(at(25, 10), { trigger: "tap" }))).toEqual({ fetch: false, reason: "budget" })
+  })
+
+  it("lässt ein Zeitfenster aus, wenn kurz vorher per Antippen abgerufen wurde", () => {
+    expect(decideMeteoblue(fetchedAt(at(25, 10, 30)), ctx(at(25, 12, 5))).fetch).toBe(false)
+  })
+
   it("erlaubt Handabrufe bis zur Tagesgrenze", () => {
     const five = Array.from({ length: 5 }, (_, i) => at(25, 6 + i))
-    expect(decideMeteoblue(fetchedAt(at(25, 10), five), ctx(at(25, 11), { manual: true }))).toEqual({ fetch: true, reason: "manual" })
+    expect(decideMeteoblue(fetchedAt(at(25, 10), five), ctx(at(25, 11), { trigger: "manual" }))).toEqual({ fetch: true, reason: "manual" })
     const six = [...five, at(25, 11)]
-    expect(decideMeteoblue(fetchedAt(at(25, 11), six), ctx(at(25, 11, 30), { manual: true }))).toEqual({
+    expect(decideMeteoblue(fetchedAt(at(25, 11), six), ctx(at(25, 11, 30), { trigger: "manual" }))).toEqual({
       fetch: false,
       reason: "daily-max",
     })
@@ -90,8 +133,43 @@ describe("decideMeteoblue", () => {
 
 describe("meteoblueSuccess", () => {
   it("merkt sich Ort und Abruf und vergisst Abrufe älter als 8 Tage", () => {
-    const next = meteoblueSuccess(state({ billedCalls: [at(10, 12), at(20, 12)] }), HOME, at(25, 13))
-    expect(next).toEqual({ lastSuccess: at(25, 13), lastAttempt: at(25, 13), lastAttemptOk: true, location: HOME, billedCalls: [at(20, 12), at(25, 13)] })
+    const failed = meteoblueFailure(state({ billedCalls: [at(10, 12), at(20, 12)] }), at(25, 12), "access", "abgelehnt")
+    expect(meteoblueSuccess(failed, HOME, at(25, 13))).toEqual({
+      lastSuccess: at(25, 13),
+      lastAttempt: at(25, 13),
+      lastError: null,
+      location: HOME,
+      billedCalls: [at(20, 12), at(25, 13)],
+      lastFailure: null,
+    })
+  })
+})
+
+describe("meteoblueFailure", () => {
+  it("verbucht eine unbrauchbare, aber abgerechnete Antwort im Budget", () => {
+    const before = fetchedAt(at(25, 6))
+    expect(meteoblueFailure(before, at(25, 12, 1), "format", "Feld fehlt").billedCalls).toEqual([at(25, 6), at(25, 12, 1)])
+    expect(meteoblueFailure(before, at(25, 12, 1), "server", "HTTP 503").billedCalls).toEqual([at(25, 6)])
+  })
+
+  it("merkt sich Meldung und Art, ein abgelehnter Key ist erkennbar", () => {
+    const rejected = meteoblueFailure(fetchedAt(at(25, 6)), at(25, 12), "access", "API key expired")
+    expect(rejected).toMatchObject({ lastSuccess: at(25, 6), lastAttempt: at(25, 12), lastError: "API key expired", lastFailure: "access" })
+    expect(meteoblueKeyRejected(rejected)).toBe(true)
+    expect(meteoblueKeyRejected(meteoblueFailure(rejected, at(25, 17), "network", "offline"))).toBe(false)
+  })
+
+  it("hält das Budget auch bei dauerhaft unbrauchbaren Antworten ein", () => {
+    // Schlimmster Fall: meteoblue ändert das Format, jeder Abruf scheitert, kostet aber
+    let s = fetchedAt(at(18, 6))
+    let calls = 0
+    for (let minute = 0; minute < 7 * 24 * 60; minute += 10) {
+      const now = at(18, 6) + minute * 60_000 + 60_000
+      if (!decideMeteoblue(s, ctx(now)).fetch) continue
+      calls++
+      s = meteoblueFailure(s, now, "format", "Feld fehlt")
+    }
+    expect(calls).toBeLessThanOrEqual(METEOBLUE_PLAN.weeklyBudget)
   })
 })
 
@@ -112,17 +190,18 @@ describe("decideSunsethue", () => {
   })
 
   it("wartet 30 Minuten nach einem Fehler, außer von Hand", () => {
-    const failed = sourceFailure(base, at(25, 12))
+    const failed = sourceFailure(base, at(25, 12), "HTTP 503")
     expect(decideSunsethue(failed, ctx(at(25, 12, 20)))).toBe(false)
-    expect(decideSunsethue(failed, ctx(at(25, 12, 20), { manual: true }))).toBe(true)
+    expect(decideSunsethue(failed, ctx(at(25, 12, 20), { trigger: "manual" }))).toBe(true)
     expect(decideSunsethue(failed, ctx(at(25, 12, 31)))).toBe(true)
   })
 })
 
 describe("decideWarnings", () => {
-  it("prüft alle 30 Minuten", () => {
+  it("prüft alle 30 Minuten und bei jedem Antippen", () => {
     const s = { ...EMPTY_SOURCE, location: HOME, lastSuccess: at(25, 12) }
     expect(decideWarnings(s, ctx(at(25, 12, 29)))).toBe(false)
+    expect(decideWarnings(s, ctx(at(25, 12, 29), { trigger: "tap" }))).toBe(true)
     expect(decideWarnings(s, ctx(at(25, 12, 30)))).toBe(true)
     expect(decideWarnings(EMPTY_SOURCE, ctx(at(25, 12)))).toBe(true)
   })

@@ -6,10 +6,10 @@
 
 import { roundCoordinates, type Coordinates } from "./geo"
 
-export const METEOBLUE_HOST = "https://my.meteoblue.com"
+const METEOBLUE_HOST = "https://my.meteoblue.com"
 
 /** Stündliche und tägliche Werte des Basic-Pakets in einem Abruf */
-export const BASIC_PACKAGES = ["basic-1h", "basic-day"] as const
+const BASIC_PACKAGES = ["basic-1h", "basic-day"] as const
 
 /**
  * Credits pro Abruf. Bei mehreren Auflösungen desselben Pakets rechnet
@@ -83,8 +83,11 @@ export type MeteoblueErrorKind =
   | "rate-limit"
   /** Fehler bei meteoblue (HTTP 5xx) */
   | "server"
-  /** Antwort hat nicht das erwartete Format */
+  /** HTTP 200, aber keine brauchbare Vorhersage. Kostet trotzdem Credits. */
   | "format"
+
+/** Fehlerart eines Abrufs: eine meteoblue-Antwort oder kein Netz bzw. Zeitüberschreitung */
+export type MeteoblueFailure = MeteoblueErrorKind | "network"
 
 export class MeteoblueError extends Error {
   readonly kind: MeteoblueErrorKind
@@ -94,6 +97,10 @@ export class MeteoblueError extends Error {
     this.name = "MeteoblueError"
     this.kind = kind
   }
+}
+
+export function failureKind(error: unknown): MeteoblueFailure {
+  return error instanceof MeteoblueError ? error.kind : "network"
 }
 
 /** Fehlerantwort von meteoblue: `{ error: true, error_message }` */
@@ -116,11 +123,14 @@ export function creditsAccounted(headers: Iterable<readonly [string, string]>): 
   return null
 }
 
-/** Prüft eine erfolgreiche Antwort. Wirft `MeteoblueError("format")` bei fehlenden Feldern. */
+/**
+ * Prüft eine Antwort mit HTTP 200. Jeder Fehler hier ist `MeteoblueError("format")`,
+ * denn meteoblue hat den Abruf schon abgerechnet.
+ */
 export function parseBasicForecast(body: unknown): Forecast {
   if (!isRecord(body)) throw formatError("Antwort ist kein Objekt")
   if (body["error"] === true) {
-    throw new MeteoblueError("request", typeof body["error_message"] === "string" ? body["error_message"] : "unbekannter Fehler")
+    throw formatError(typeof body["error_message"] === "string" ? body["error_message"] : "unbekannter Fehler")
   }
 
   const metadata = record(body, "metadata")
@@ -169,7 +179,7 @@ export function toUtcMillis(value: unknown, utcOffsetHours: number): number {
 }
 
 /** "2026-11-25" */
-export function toDateString(value: unknown): string {
+function toDateString(value: unknown): string {
   const match = typeof value === "string" ? /^(\d{4}-\d{2}-\d{2})/.exec(value.trim()) : null
   if (!match?.[1]) throw formatError(`Unbekanntes Datumsformat: ${JSON.stringify(value)}`)
   return match[1]

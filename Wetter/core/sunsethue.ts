@@ -7,7 +7,7 @@
 
 import { round, type Coordinates } from "./geo"
 
-export const SUNSETHUE_HOST = "https://api.sunsethue.com"
+const SUNSETHUE_HOST = "https://api.sunsethue.com"
 export const SUNSETHUE_KEY_HEADER = "x-api-key"
 
 export type SunEventType = "sunrise" | "sunset"
