@@ -18,7 +18,7 @@ const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, ho
 const HOME = { lat: 49.0, lon: 8.4 }
 const HOUR = 3_600_000
 
-const ctx = (now: number, extra: Partial<Context> = {}): Context => ({ now, here: HOME, hasData: true, manual: false, ...extra })
+const ctx = (now: number, extra: Partial<Context> = {}): Context => ({ now, here: HOME, hasData: true, trigger: "schedule", ...extra })
 const state = (partial: Partial<MeteoblueState>): MeteoblueState => ({ ...EMPTY_METEOBLUE, location: HOME, ...partial })
 /** Zustand nach einem erfolgreichen Abruf zu `time` */
 const fetchedAt = (time: number, calls: number[] = [time]) => state({ lastSuccess: time, billedCalls: calls })
@@ -73,11 +73,29 @@ describe("decideMeteoblue", () => {
     expect(decideMeteoblue(failed, ctx(at(25, 12, 30)))).toEqual({ fetch: true, reason: "slot" })
   })
 
+  it("holt beim Antippen Daten, die älter als 3 Stunden sind", () => {
+    const fresh = fetchedAt(at(25, 12, 5))
+    expect(decideMeteoblue(fresh, ctx(at(25, 14), { trigger: "tap" }))).toEqual({ fetch: false, reason: "up-to-date" })
+    expect(decideMeteoblue(fresh, ctx(at(25, 15, 10), { trigger: "tap" }))).toEqual({ fetch: true, reason: "tap" })
+    // ohne Antippen wartet der normale Durchlauf bis 17 Uhr
+    expect(decideMeteoblue(fresh, ctx(at(25, 15, 10)))).toEqual({ fetch: false, reason: "up-to-date" })
+  })
+
+  it("verbraucht beim Antippen kein Budget über die Grenze hinaus", () => {
+    const calls = Array.from({ length: METEOBLUE_PLAN.weeklyBudget }, (_, i) => at(25, 6) - (i + 1) * 6 * HOUR)
+    const exhausted = state({ lastSuccess: at(25, 6), billedCalls: calls })
+    expect(decideMeteoblue(exhausted, ctx(at(25, 10), { trigger: "tap" }))).toEqual({ fetch: false, reason: "budget" })
+  })
+
+  it("lässt ein Zeitfenster aus, wenn kurz vorher per Antippen abgerufen wurde", () => {
+    expect(decideMeteoblue(fetchedAt(at(25, 10, 30)), ctx(at(25, 12, 5))).fetch).toBe(false)
+  })
+
   it("erlaubt Handabrufe bis zur Tagesgrenze", () => {
     const five = Array.from({ length: 5 }, (_, i) => at(25, 6 + i))
-    expect(decideMeteoblue(fetchedAt(at(25, 10), five), ctx(at(25, 11), { manual: true }))).toEqual({ fetch: true, reason: "manual" })
+    expect(decideMeteoblue(fetchedAt(at(25, 10), five), ctx(at(25, 11), { trigger: "manual" }))).toEqual({ fetch: true, reason: "manual" })
     const six = [...five, at(25, 11)]
-    expect(decideMeteoblue(fetchedAt(at(25, 11), six), ctx(at(25, 11, 30), { manual: true }))).toEqual({
+    expect(decideMeteoblue(fetchedAt(at(25, 11), six), ctx(at(25, 11, 30), { trigger: "manual" }))).toEqual({
       fetch: false,
       reason: "daily-max",
     })
@@ -114,15 +132,16 @@ describe("decideSunsethue", () => {
   it("wartet 30 Minuten nach einem Fehler, außer von Hand", () => {
     const failed = sourceFailure(base, at(25, 12))
     expect(decideSunsethue(failed, ctx(at(25, 12, 20)))).toBe(false)
-    expect(decideSunsethue(failed, ctx(at(25, 12, 20), { manual: true }))).toBe(true)
+    expect(decideSunsethue(failed, ctx(at(25, 12, 20), { trigger: "manual" }))).toBe(true)
     expect(decideSunsethue(failed, ctx(at(25, 12, 31)))).toBe(true)
   })
 })
 
 describe("decideWarnings", () => {
-  it("prüft alle 30 Minuten", () => {
+  it("prüft alle 30 Minuten und bei jedem Antippen", () => {
     const s = { ...EMPTY_SOURCE, location: HOME, lastSuccess: at(25, 12) }
     expect(decideWarnings(s, ctx(at(25, 12, 29)))).toBe(false)
+    expect(decideWarnings(s, ctx(at(25, 12, 29), { trigger: "tap" }))).toBe(true)
     expect(decideWarnings(s, ctx(at(25, 12, 30)))).toBe(true)
     expect(decideWarnings(EMPTY_SOURCE, ctx(at(25, 12)))).toBe(true)
   })

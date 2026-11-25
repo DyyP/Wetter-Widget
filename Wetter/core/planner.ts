@@ -27,14 +27,21 @@ export interface MeteoblueState extends SourceState {
 export const EMPTY_SOURCE: SourceState = { lastSuccess: null, lastAttempt: null, lastAttemptOk: null, location: null }
 export const EMPTY_METEOBLUE: MeteoblueState = { ...EMPTY_SOURCE, billedCalls: [] }
 
+/**
+ * Wer den Abruf auslöst:
+ * - "schedule": normaler Widget-Durchlauf
+ * - "tap": Antippen des Widgets, holt veraltete Daten im Rahmen des Budgets
+ * - "manual": „Jetzt aktualisieren“ in der App, holt alles sofort
+ */
+export type Trigger = "schedule" | "tap" | "manual"
+
 export interface Context {
   now: number
   /** Aktueller Ort, null wenn unbekannt */
   here: Coordinates | null
   /** Ob gespeicherte Daten dieser Quelle vorhanden sind */
   hasData: boolean
-  /** Von Hand ausgelöst (App-Menü) */
-  manual: boolean
+  trigger: Trigger
 }
 
 export const METEOBLUE_PLAN = {
@@ -49,11 +56,13 @@ export const METEOBLUE_PLAN = {
   /** Wartezeit nach einem Fehlversuch */
   retryMinutes: 20,
   /** Ein planmäßiger Abruf entfällt, wenn der letzte so kurz zurückliegt */
-  minGapMinutes: 60,
+  minGapMinutes: 120,
+  /** Beim Antippen gelten Daten ab diesem Alter als veraltet */
+  tapMaxAgeMinutes: 180,
 } as const
 
 export type MeteoblueDecision =
-  | { fetch: true; reason: "no-data" | "moved" | "slot" | "manual" }
+  | { fetch: true; reason: "no-data" | "moved" | "slot" | "tap" | "manual" }
   | { fetch: false; reason: "up-to-date" | "budget" | "retry-wait" | "daily-max" }
 
 export function decideMeteoblue(state: MeteoblueState, ctx: Context): MeteoblueDecision {
@@ -62,7 +71,7 @@ export function decideMeteoblue(state: MeteoblueState, ctx: Context): MeteoblueD
   if (state.billedCalls.filter((t) => localDateString(t) === today).length >= plan.dailyMax) {
     return { fetch: false, reason: "daily-max" }
   }
-  if (ctx.manual) return { fetch: true, reason: "manual" }
+  if (ctx.trigger === "manual") return { fetch: true, reason: "manual" }
   if (inRetryWait(state, ctx.now, plan.retryMinutes)) return { fetch: false, reason: "retry-wait" }
   // Ohne Daten wird immer abgerufen, sonst bliebe das Widget leer.
   if (!ctx.hasData || state.lastSuccess === null) return { fetch: true, reason: "no-data" }
@@ -74,6 +83,9 @@ export function decideMeteoblue(state: MeteoblueState, ctx: Context): MeteoblueD
   const due =
     state.lastSuccess < lastSlotStart(ctx.now, plan.slotHours) && state.lastSuccess < ctx.now - plan.minGapMinutes * MINUTE
   if (due) return budgetLeft ? { fetch: true, reason: "slot" } : { fetch: false, reason: "budget" }
+  if (ctx.trigger === "tap" && state.lastSuccess < ctx.now - plan.tapMaxAgeMinutes * MINUTE) {
+    return budgetLeft ? { fetch: true, reason: "tap" } : { fetch: false, reason: "budget" }
+  }
   return { fetch: false, reason: "up-to-date" }
 }
 
@@ -110,7 +122,7 @@ const SUNSETHUE_UPDATES_UTC: readonly (readonly [number, number])[] = [
 const SUNSETHUE_DELAY_MINUTES = 20
 
 export function decideSunsethue(state: SourceState, ctx: Context): boolean {
-  if (ctx.manual) return true
+  if (ctx.trigger === "manual") return true
   if (inRetryWait(state, ctx.now, 30)) return false
   if (!ctx.hasData || state.lastSuccess === null) return true
   if (localDateString(state.lastSuccess) !== localDateString(ctx.now)) return true
@@ -118,9 +130,9 @@ export function decideSunsethue(state: SourceState, ctx: Context): boolean {
   return state.lastSuccess < lastUtcUpdate(ctx.now - SUNSETHUE_DELAY_MINUTES * MINUTE)
 }
 
-/** DWD-Warnungen sind kostenlos: alle 30 Minuten und bei Ortswechsel. */
+/** DWD-Warnungen sind kostenlos: alle 30 Minuten, bei Ortswechsel und bei jedem Antippen. */
 export function decideWarnings(state: SourceState, ctx: Context): boolean {
-  if (ctx.manual) return true
+  if (ctx.trigger !== "schedule") return true
   if (inRetryWait(state, ctx.now, 10)) return false
   if (!ctx.hasData || state.lastSuccess === null) return true
   return movedFrom(state, ctx.here, 5) || ctx.now - state.lastSuccess >= 30 * MINUTE

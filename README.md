@@ -8,7 +8,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 |---|---|---|
 | M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
 | M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.7) |
-| M3 | Look-Feinschliff: Strich, Hintergrund, Regenzeilen nur bei Bedarf, volle Breite | läuft (0.2.8) |
+| M3 | Look-Feinschliff: Strich, Hintergrund, Regenzeilen nur bei Bedarf, volle Breite, Antippen aktualisiert | läuft (0.2.9) |
 
 ## Was das Widget zeigt
 
@@ -16,7 +16,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 - **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung. Ohne Sunsethue berechnet das Widget die Uhrzeit selbst.
 - **Tagesreihe:** HEUTE plus 4 Tage mit Icon, Max/Min und Regen. Für heute bis übermorgen gibt es einen Punkt in der Farbe der Sonnenuntergangs-Qualität.
 - **Trenner:** feiner Strich zwischen Stunden und Tagen. Bei amtlichen DWD-Unwettern ab Stufe 3 wird er zur farbigen Warnzeile mit Text. Sind die Daten älter als 12 Stunden, steht „Stand …“ vorne am Strich.
-- **Antippen** öffnet die meteoblue-App am Ort der Daten.
+- **Antippen** prüft im Hintergrund Ort und Datenstand: Ortswechsel über 5 km oder meteoblue-Daten älter als 3 Stunden werden neu geholt (im Rahmen des Budgets), DWD-Warnungen immer; danach zeichnet sich das Widget neu.
 
 ## Wie es aktuell bleibt
 
@@ -53,6 +53,7 @@ Wetter/                 Das Scripting-Script (Remote-Quelle der App)
   script.json           Name, Version, Symbol
   index.tsx             App-Einstieg: Menü
   widget.tsx            Widget-Einstieg: auffrischen, Modell bauen, zeichnen
+  app_intents.tsx       Antippen des Widgets: im Hintergrund prüfen und aktualisieren
   core/                 Reine Logik ohne Scripting-APIs, vollständig getestet
     meteoblue.ts        API-URL, Antwortprüfung, Credits
     sunsethue.ts        Sonnen-Qualität und Bewertung

@@ -1,6 +1,6 @@
 /** Das mittlere Wetter-Widget im Look deines bisherigen Scripts. */
 
-import { Circle, HStack, Image, Spacer, Text, VStack } from "scripting"
+import { Button, Circle, HStack, Image, Rectangle, Text, VStack, type AppIntent } from "scripting"
 import type { DayColumn, HourSlot, SunSlot, WarningRow, WidgetModel } from "../core/model"
 import { PICTO_ASPECT } from "../core/picto"
 import { theme, type Grid } from "./theme"
@@ -133,38 +133,39 @@ function Divider(props: { width: number; warning: WarningRow | null; staleHint: 
           {label}
         </Text>
       )}
-      <VStack frame={{ height: 1, maxWidth: "infinity" }} background={color} />
+      <Rectangle fill={color} frame={{ height: 1 }} />
     </HStack>
   )
 }
 
-export function WeatherWidget(props: { model: WidgetModel; icons: Icons; grid: Grid }) {
+/** `tapIntent` läuft beim Antippen im Hintergrund (Ort und Datenstand prüfen, neu zeichnen). */
+export function WeatherWidget(props: { model: WidgetModel; icons: Icons; grid: Grid; tapIntent: AppIntent<undefined> }) {
   const { model, icons, grid } = props
   return (
     <VStack
-      spacing={layout.rowSpacing}
       padding={{ vertical: layout.widgetPaddingVertical }}
       frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
       widgetBackground={colors.background}
-      widgetURL={model.tapUrl}
     >
-      <Spacer minLength={0} />
-      <HStack spacing={0}>
-        {model.slots.map((slot) =>
-          slot.kind === "hour" ? (
-            <HourColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
-          ) : (
-            <SunColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
-          ),
-        )}
-      </HStack>
-      <Divider width={grid.rowWidth} warning={model.warning} staleHint={model.staleHint} />
-      <HStack spacing={0}>
-        {model.days.map((day) => (
-          <DayColumnView day={day} grid={grid} icons={icons} extraRow={model.dayRainRow} />
-        ))}
-      </HStack>
-      <Spacer minLength={0} />
+      <Button intent={props.tapIntent} buttonStyle="plain">
+        <VStack spacing={layout.rowSpacing}>
+          <HStack spacing={0}>
+            {model.slots.map((slot) =>
+              slot.kind === "hour" ? (
+                <HourColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
+              ) : (
+                <SunColumn slot={slot} grid={grid} icons={icons} extraRow={model.hourRainRow} />
+              ),
+            )}
+          </HStack>
+          <Divider width={grid.rowWidth} warning={model.warning} staleHint={model.staleHint} />
+          <HStack spacing={0}>
+            {model.days.map((day) => (
+              <DayColumnView day={day} grid={grid} icons={icons} extraRow={model.dayRainRow} />
+            ))}
+          </HStack>
+        </VStack>
+      </Button>
     </VStack>
   )
 }

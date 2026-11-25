@@ -6,7 +6,7 @@
 
 import { alertText, relevantAlerts, type Alert, type WarningLevel } from "./dwd"
 import { formatClock, formatRelativeDay } from "./format"
-import { addDays, localDateString, weekday, type Coordinates } from "./geo"
+import { addDays, localDateString, weekday } from "./geo"
 import type { Forecast, HourlyPoint } from "./meteoblue"
 import { dailyIconName, hourlyIconName, isDailyPictocode, isHourlyPictocode } from "./picto"
 import { sunTimes } from "./sun"
@@ -79,8 +79,6 @@ export interface WidgetModel {
   warning: WarningRow | null
   /** "Stand gestern 17:02", nur wenn die Daten älter als 12 Stunden sind */
   staleHint: string | null
-  /** Öffnet die meteoblue-App (Universal Link) am Ort der Daten */
-  tapUrl: string
   /** Wann das Widget frühestens neu gezeichnet werden soll: Beginn der nächsten Stunde */
   nextRefresh: number
 }
@@ -126,7 +124,6 @@ export function buildModel(input: ModelInput): ModelResult {
       dayRainRow: days.some((day) => day.rain !== null),
       warning,
       staleHint: stale === null ? null : `Stand ${formatRelativeDay(stale, now)}`,
-      tapUrl: meteoblueWeekUrl({ lat: forecast.latitude, lon: forecast.longitude }),
       nextRefresh: startOfNextHour(now),
     },
   }
@@ -207,13 +204,6 @@ function dayColumns(forecast: Forecast, sunEvents: SunEvent[], now: number): Day
       sunsetLevel: typeof sunset?.quality === "number" ? qualityLevel(sunset.quality) : null,
     }
   })
-}
-
-/** Universal Link, den die meteoblue-App öffnet: /de/weather/week/49.496N8.477E */
-export function meteoblueWeekUrl(place: Coordinates): string {
-  const coord = (value: number, positive: string, negative: string) =>
-    `${Math.abs(value).toFixed(3)}${value >= 0 ? positive : negative}`
-  return `https://www.meteoblue.com/de/weather/week/${coord(place.lat, "N", "S")}${coord(place.lon, "E", "W")}`
 }
 
 /** Wie im bisherigen Widget: auf 0,1 mm runden, 0 mm nicht anzeigen. */

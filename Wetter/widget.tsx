@@ -5,6 +5,7 @@
  */
 
 import { Widget } from "scripting"
+import { RefreshIntent } from "./app_intents"
 import { buildModel, modelIconNames } from "./core/model"
 import { refresh, reportErrors } from "./data/refresh"
 import { loadAlerts, loadForecast, loadSunEvents, saveWidgetRun } from "./platform/cache"
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
 
   let errors: string[]
   try {
-    errors = reportErrors(await refresh(now, { manual: false, inWidget: true }))
+    errors = reportErrors(await refresh(now, "schedule", "widget"))
   } catch (error) {
     // Ohne frische Daten weiter mit dem Cache
     errors = [errorText(error)]
@@ -59,10 +60,15 @@ async function main(): Promise<void> {
   }
 
   await saveWidgetRun({ time: now, result: "Wetter", errors })
-  Widget.present(<WeatherWidget model={result.model} icons={icons} grid={gridFor(Widget.displaySize.width)} />, {
-    policy: "after",
-    date: new Date(result.model.nextRefresh + AFTER_HOUR_MS),
-  })
+  Widget.present(
+    <WeatherWidget
+      model={result.model}
+      icons={icons}
+      grid={gridFor(Widget.displaySize.width)}
+      tapIntent={RefreshIntent(undefined)}
+    />,
+    { policy: "after", date: new Date(result.model.nextRefresh + AFTER_HOUR_MS) },
+  )
 }
 
 async function showMessage(now: number, text: string, errors: string[]): Promise<void> {

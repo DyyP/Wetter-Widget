@@ -16,6 +16,7 @@ import {
   sourceSuccess,
   type Context,
   type MeteoblueDecision,
+  type Trigger,
 } from "../core/planner"
 import type { SunEventQuery } from "../core/sunsethue"
 import { cachedSources, loadPlanner, saveAlerts, saveForecast, savePlanner, saveSunEvents } from "../platform/cache"
@@ -40,17 +41,22 @@ export interface RefreshReport {
   warnings: SourceReport
 }
 
-/** Im Widget hat iOS nur wenige Sekunden Geduld, in der App darf es länger dauern. */
-const LIMITS = {
-  widget: { locationMs: 3000, fetchSeconds: 8 },
-  app: { locationMs: 10_000, fetchSeconds: 20 },
-} as const
+/** Wo der Abruf läuft: im Widget, im Hintergrund nach Antippen (AppIntent) oder in der App */
+export type Environment = "widget" | "intent" | "app"
 
-export async function refresh(now: number, mode: { manual: boolean; inWidget: boolean }): Promise<RefreshReport> {
-  const limits = mode.inWidget ? LIMITS.widget : LIMITS.app
+/** Im Widget hat iOS nur wenige Sekunden Geduld, in der App darf es länger dauern. */
+const LIMITS: Record<Environment, { locationMs: number; fetchSeconds: number }> = {
+  widget: { locationMs: 3000, fetchSeconds: 8 },
+  intent: { locationMs: 5000, fetchSeconds: 10 },
+  app: { locationMs: 10_000, fetchSeconds: 20 },
+}
+
+export async function refresh(now: number, trigger: Trigger, environment: Environment): Promise<RefreshReport> {
+  const limits = LIMITS[environment]
   const [store, cached] = await Promise.all([loadPlanner(), cachedSources()])
 
-  const located = mode.inWidget && !widgetLocationAllowed() ? null : await currentCoordinates(limits.locationMs)
+  const mayLocate = environment !== "widget" || widgetLocationAllowed()
+  const located = mayLocate ? await currentCoordinates(limits.locationMs) : null
   if (located !== null) store.lastLocation = located
   const here = located ?? store.lastLocation
 
@@ -63,7 +69,7 @@ export async function refresh(now: number, mode: { manual: boolean; inWidget: bo
   }
   if (here === null) return report
 
-  const context = (hasData: boolean): Context => ({ now, here, hasData, manual: mode.manual })
+  const context = (hasData: boolean): Context => ({ now, here, hasData, trigger })
   const tasks: Promise<void>[] = []
 
   const meteoblueKey = readSecret("meteoblue")

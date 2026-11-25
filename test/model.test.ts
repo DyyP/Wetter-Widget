@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Alert } from "../Wetter/core/dwd"
 import type { Forecast } from "../Wetter/core/meteoblue"
-import { buildModel, formatRain, meteoblueWeekUrl, modelIconNames, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
+import { buildModel, formatRain, modelIconNames, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
 import type { SunEvent } from "../Wetter/core/sunsethue"
 
 // Testzeitzone Europe/Berlin, 25.11.2026 ist ein Mittwoch. Ort: Berlin.
@@ -126,10 +126,8 @@ describe("Warnung und Hinweise", () => {
     expect(modelIconNames(m)).toContain("01_iday.svg")
   })
 
-  it("verlinkt die meteoblue-App und plant die nächste volle Stunde", () => {
-    const m = model()
-    expect(m.tapUrl).toBe("https://www.meteoblue.com/de/weather/week/52.520N13.405E")
-    expect(m.nextRefresh).toBe(local(25, 16))
+  it("plant die nächste volle Stunde", () => {
+    expect(model().nextRefresh).toBe(local(25, 16))
   })
 })
 
@@ -150,7 +148,4 @@ describe("Hilfsfunktionen", () => {
     expect(roundTemperature(-2.6)).toBe(-3)
   })
 
-  it("schreibt Koordinaten für die Südhalbkugel und den Westen", () => {
-    expect(meteoblueWeekUrl({ lat: -33.8688, lon: -151.2093 })).toBe("https://www.meteoblue.com/de/weather/week/33.869S151.209W")
-  })
 })
