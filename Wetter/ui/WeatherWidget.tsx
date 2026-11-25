@@ -12,20 +12,19 @@ export interface IconSource {
   /** Namen der Icons, die lokal vorliegen */
   available: Set<string>
   path: (name: string) => string
+  /** Testmodus: "svg" (Standard), "png" (meteoblue-PNG) oder "none" (ohne Icons) */
+  mode?: "svg" | "png" | "none"
 }
 
 function PictoIcon(props: { name: string; width: number; icons: IconSource }) {
   const height = Math.round(props.width * PICTO_ASPECT * 10) / 10
-  if (!props.icons.available.has(props.name)) return <VStack frame={{ width: props.width, height }} />
-  return (
-    <SVG
-      filePath={props.icons.path(props.name)}
-      resizable
-      interpolation="high"
-      antialiased
-      frame={{ width: props.width, height }}
-    />
-  )
+  const mode = props.icons.mode ?? "svg"
+  if (mode === "none" || !props.icons.available.has(props.name)) return <VStack frame={{ width: props.width, height }} />
+  if (mode === "png") {
+    return <Image filePath={props.icons.path(props.name)} resizable frame={{ width: props.width, height }} />
+  }
+  // Ohne höchste Interpolation und Antialiasing: spart Speicher beim Umrechnen
+  return <SVG filePath={props.icons.path(props.name)} resizable frame={{ width: props.width, height }} />
 }
 
 function slotBackground(color: string) {

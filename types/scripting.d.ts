@@ -254,6 +254,7 @@ declare namespace FileManager {
   function createDirectory(path: string, recursive?: boolean): Promise<void>
   function readAsString(path: string): Promise<string>
   function writeAsString(path: string, content: string): Promise<void>
+  function writeAsData(path: string, data: Data): Promise<void>
   function appendText(path: string, content: string): Promise<void>
   function remove(path: string): Promise<void>
 }
@@ -284,6 +285,11 @@ declare namespace Safari {
 
 // --- fetch (Scripting-Variante des Web-Standards) ---------------------------
 
+/** Binärdaten in Scripting */
+declare class Data {
+  readonly size: number
+}
+
 declare class Headers {
   get(name: string): string | null
   has(name: string): boolean
@@ -297,6 +303,8 @@ declare class Response {
   readonly headers: Headers
   json(): Promise<unknown>
   text(): Promise<string>
+  /** Scripting-Erweiterung: Rumpf als Data (z. B. Bilder) */
+  data(): Promise<Data>
 }
 
 declare class AbortSignal {

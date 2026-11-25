@@ -26,6 +26,12 @@ export async function ensureIcons(names: string[]): Promise<Set<string>> {
       const path = iconPath(name)
       if (await FileManager.exists(path)) return name
       try {
+        if (name.endsWith(".png")) {
+          const response = await fetch(iconUrl(name), { method: "GET", timeout: 10 })
+          if (!response.ok) return null
+          await FileManager.writeAsData(path, await response.data())
+          return name
+        }
         const svg = await getText(iconUrl(name))
         if (!svg.trimStart().startsWith("<svg") && !svg.trimStart().startsWith("<?xml")) return null
         await FileManager.writeAsString(path, svg)
