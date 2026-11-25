@@ -2,16 +2,24 @@
  * Offizielle meteoblue-Icons. Ein Widget kann SVGs nicht selbst umrechnen,
  * das sprengt sein Speicherlimit (auf dem iPhone bestätigt). Deshalb rendert
  * die App alle Icons einmal in scharfe PNGs (3-fache Auflösung), und das
- * Widget zeigt nur diese fertigen Bilder.
+ * Widget zeigt nur diese fertigen Bilder. Vor dem Rendern werden die
+ * `<use>`-Verweise aufgelöst, sonst zeichnet Scripting die Wolken schwarz.
  * Die Icons gehören meteoblue und liegen nur auf dem Gerät, nie im Repo.
  */
 
 import { ImageRenderer, SVG } from "scripting"
 import { PICTO_ASPECT, allIconNames, iconUrl } from "../core/picto"
+import { flattenSvg } from "../core/svg"
 import { getText } from "./http"
 import { ensureDirectory, sharedDirectory } from "./storage"
 
-const ICON_DIR = `${sharedDirectory}/icons`
+/**
+ * Bei jeder Änderung am Rendern hochzählen: Dann entsteht ein neuer Ordner,
+ * und der alte wird gelöscht.
+ */
+const RENDER_VERSION = 2
+const ICON_DIR = `${sharedDirectory}/icons-v${RENDER_VERSION}`
+const OBSOLETE_ICON_DIRS = [`${sharedDirectory}/icons`]
 /** Render-Größe in pt. Reicht für die 36- und 30-pt-Icons im Widget. */
 const RENDER_WIDTH = 48
 const RENDER_SCALE = 3
@@ -31,6 +39,11 @@ export async function renderedIcons(names: string[]): Promise<Map<string, string
  * damit der Speicher klein bleibt). Liefert die Zahl fertiger Icons.
  */
 export async function prepareIcons(): Promise<{ ready: number; total: number }> {
+  await Promise.all(
+    OBSOLETE_ICON_DIRS.map(async (dir) => {
+      if (await FileManager.exists(dir)) await FileManager.remove(dir)
+    }),
+  )
   await ensureDirectory(ICON_DIR)
   const names = allIconNames()
   const missing = (await Promise.all(names.map(async (name) => ((await FileManager.exists(pngPath(name))) ? null : name)))).filter(
@@ -41,10 +54,9 @@ export async function prepareIcons(): Promise<{ ready: number; total: number }> 
     missing.map(async (name) => {
       if (await FileManager.exists(svgPath(name))) return
       try {
-        const svg = await getText(iconUrl(name), 15)
-        if (svg.includes("<svg")) await FileManager.writeAsString(svgPath(name), svg)
+        await FileManager.writeAsString(svgPath(name), flattenSvg(await getText(iconUrl(name), 15)))
       } catch {
-        // fehlt beim nächsten Aufruf erneut und wird dann nachgeladen
+        // Download oder Format fehlgeschlagen: beim nächsten Aufruf erneut
       }
     }),
   )

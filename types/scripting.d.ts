@@ -175,6 +175,8 @@ declare namespace FileManager {
   function readAsString(path: string): Promise<string>
   function writeAsString(path: string, content: string): Promise<void>
   function writeAsData(path: string, data: Data): Promise<void>
+  /** Löscht eine Datei oder einen Ordner samt Inhalt */
+  function remove(path: string): Promise<void>
 }
 
 declare namespace Location {

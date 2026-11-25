@@ -7,7 +7,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 | Meilenstein | Inhalt | Status |
 |---|---|---|
 | M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
-| M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.5) |
+| M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.6) |
 | M3 | Look-Feinschliff | als Nächstes |
 
 ## Was das Widget zeigt
@@ -62,6 +62,7 @@ Wetter/                 Das Scripting-Script (Remote-Quelle der App)
     planner.ts          Wann wird was abgerufen
     model.ts            Was das Widget zeigt
     picto.ts            Namen der meteoblue-Icons
+    svg.ts              Löst <use>-Verweise der Icons für den Scripting-Renderer auf
     format.ts, geo.ts   Formatierung, Koordinaten, Kalendertage
   data/refresh.ts       Abrufablauf für Widget und App
   platform/             Dünne Hüllen um Scripting-APIs: Speicher, Netz, Ortung, Schlüsselbund, Icons
@@ -78,6 +79,7 @@ types/scripting.d.ts    Typen der genutzten Scripting-APIs
 - **Kein Standort im Repo.** Testdaten nutzen öffentliche Orte (Berlin).
 - **`core/` bleibt rein:** keine Scripting-APIs, damit alles in Node testbar ist.
 - **Im Widget keine SVGs:** Das Umrechnen sprengt das Speicherlimit des Widgets. SVGs rendert nur die App zu PNGs.
+- **SVGs vor dem Rendern auflösen:** Scripting vererbt keine Stile über `<use>`, die meteoblue-Wolken würden schwarz. `core/svg.ts` macht daraus reine Pfade; im Browser pixelgleich mit dem Original (alle 87 Icons geprüft).
 - **Typen nur für Genutztes:** `types/scripting.d.ts` enthält nur, was der Code verwendet. Die offiziellen Typen schreibt `npx scripting-cli start` nach `dts/`.
 
 ### Branches
