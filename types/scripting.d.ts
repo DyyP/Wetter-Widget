@@ -194,6 +194,8 @@ declare namespace Dialog {
 declare namespace FileManager {
   /** Für App und Widget gemeinsam, nicht in der Dateien-App sichtbar */
   const appGroupDocumentsDirectory: string
+  /** Temporärer Ordner, den iOS bei Bedarf leert */
+  const temporaryDirectory: string
   function exists(path: string): Promise<boolean>
   function createDirectory(path: string, recursive?: boolean): Promise<void>
   function readAsString(path: string): Promise<string>

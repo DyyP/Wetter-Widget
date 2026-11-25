@@ -8,14 +8,17 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 |---|---|---|
 | M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
 | M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.7) |
-| M3 | Look-Feinschliff: Strich, Hintergrund, Regenzeilen nur bei Bedarf, volle Breite, Antippen aktualisiert | läuft (0.2.9) |
+| M3 | Look-Feinschliff: Strich, Hintergrund, Regenzeilen nur bei Bedarf, volle Breite, Antippen aktualisiert | erledigt (0.2.9) |
+| M4 | Langzeitbetrieb: Code-Review, Budget auch bei Fehlern sicher, Hinweis bei abgelaufenem Key, Reisen ins Ausland | erledigt (1.0.0) |
 
 ## Was das Widget zeigt
 
 - **Stundenreihe:** JETZT plus die nächsten Stunden mit meteoblue-Icon (Tag/Nacht), Temperatur, gefühlter Temperatur und Regen.
 - **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung. Ohne Sunsethue berechnet das Widget die Uhrzeit selbst.
 - **Tagesreihe:** HEUTE plus 4 Tage mit Icon, Max/Min und Regen. Für heute bis übermorgen gibt es einen Punkt in der Farbe der Sonnenuntergangs-Qualität.
-- **Trenner:** feiner Strich zwischen Stunden und Tagen. Bei amtlichen DWD-Unwettern ab Stufe 3 wird er zur farbigen Warnzeile mit Text. Sind die Daten älter als 12 Stunden, steht „Stand …“ vorne am Strich.
+- **Trenner:** feiner Strich zwischen Stunden und Tagen. Bei amtlichen DWD-Unwettern ab Stufe 3 wird er zur farbigen Warnzeile mit Text. Sonst steht vorne am Strich ein Hinweis, falls nötig:
+  - „meteoblue-Key prüfen · Stand …“ in Orange, wenn meteoblue den Key ablehnt
+  - „Stand …“, wenn mindestens ein Abruf-Zeitfenster verpasst wurde (Daten älter als 16 Stunden)
 - **Antippen** prüft im Hintergrund Ort und Datenstand: Ortswechsel über 5 km oder meteoblue-Daten älter als 3 Stunden werden neu geholt (im Rahmen des Budgets), DWD-Warnungen immer; danach zeichnet sich das Widget neu.
 
 ## Wie es aktuell bleibt
@@ -23,7 +26,15 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 - **meteoblue:** um 06, 12 und 17 Uhr (beim ersten Widget-Durchlauf danach) und bei Ortswechsel über 5 km. Höchstens 23 Abrufe in 7 Tagen, das sind hochgerechnet 9,6 Mio. der 10 Mio. Credits pro Jahr. Ein Abruf kostet laut Header `MB-Credits-Accounted` 8.000 Credits.
 - **Dazwischen:** Das Widget berechnet zu jeder vollen Stunde aus den gespeicherten Stundenwerten neu, „JETZT“ stimmt also immer.
 - **Sunsethue:** nach jedem seiner 6-Stunden-Updates.
-- **DWD-Warnungen:** alle 30 Minuten.
+- **DWD-Warnungen:** alle 30 Minuten. Außerhalb Deutschlands gibt es keine DWD-Warnungen, das Widget zeigt dort einfach keine.
+- **Nach Fehlern:** Bei Netz- oder Serverproblemen versucht es meteoblue nach 20 Minuten erneut. Lehnt meteoblue den Key oder die Anfrage ab oder ist die Antwort unbrauchbar, erst im nächsten Zeitfenster. Unbrauchbare Antworten zählen ins Budget, weil meteoblue sie abrechnet. So bleibt das Jahreskontingent auch dann sicher, wenn meteoblue etwas ändert.
+
+## Langzeitbetrieb
+
+- **meteoblue-Key:** Der kostenlose Zugang gilt ein Jahr ab Aktivierung, mit 10 Mio. Credits. Danach lehnt meteoblue den Key ab. Das Widget zeigt dann „meteoblue-Key prüfen“ am Trenner und die letzten Daten weiter, bis sie nach 7 Tagen auslaufen. Abhilfe: auf [my.meteoblue.com](https://my.meteoblue.com) den Zugang verlängern oder Credits kaufen, den Key im Script unter **API-Keys einrichten** eintragen. Direkt danach bietet das Script an, zu aktualisieren.
+- **Sunsethue:** kostenlos 1.000 Credits pro Tag, das Widget braucht etwa 150.
+- **DWD über Bright Sky:** kostenlos, ohne Key.
+- **Wenn etwas nicht stimmt:** **Status anzeigen** im Script nennt pro Quelle den letzten Abruf und den letzten Fehler, das Budget der letzten 7 Tage und den letzten Widget-Durchlauf.
 
 ## Einrichtung auf dem iPhone
 
@@ -37,7 +48,7 @@ die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtlic
 4. **Widget hinzufügen:** Home-Bildschirm lange drücken → `+` → Scripting → mittleres Widget → *Widget bearbeiten* → Script `Wetter`. Parameter leer lassen, „Remote Updates“ aus.
 5. **Standort für Widgets erlauben:** iOS-Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → Scripting → *Beim Verwenden der App oder Widgets*.
 
-**Status anzeigen** im Script zeigt Keys, letzte Abrufe, Budget und das Ergebnis des letzten Widget-Durchlaufs samt Fehlern.
+**Status anzeigen** im Script zeigt Keys, letzte Abrufe mit Fehlern, Budget und das Ergebnis des letzten Widget-Durchlaufs.
 
 ## Entwicklung
 

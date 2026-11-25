@@ -1,6 +1,6 @@
 /** Abrufe der drei Datenquellen: meteoblue, Sunsethue und DWD (Bright Sky). */
 
-import { buildAlertsUrl, parseAlerts, type Alert } from "../core/dwd"
+import { alertsFromResponse, buildAlertsUrl, type Alert } from "../core/dwd"
 import type { Coordinates } from "../core/geo"
 import { buildBasicForecastUrl, creditsAccounted, errorFromResponse, parseBasicForecast, type Forecast } from "../core/meteoblue"
 import { SUNSETHUE_KEY_HEADER, buildEventUrl, errorFromSunsethue, parseEvent, type SunEvent, type SunEventQuery } from "../core/sunsethue"
@@ -33,6 +33,5 @@ export async function fetchSunEvents(apiKey: string, queries: SunEventQuery[], t
 
 export async function fetchAlerts(here: Coordinates, timeoutSeconds: number): Promise<Alert[]> {
   const response = await getJson(buildAlertsUrl(here), { timeoutSeconds })
-  if (!response.ok) throw new Error(`Bright Sky: HTTP ${response.status}`)
-  return parseAlerts(response.body)
+  return alertsFromResponse(response.status, response.body)
 }

@@ -2,12 +2,14 @@
  * Amtliche Warnungen des Deutschen Wetterdienstes über Bright Sky
  * (https://brightsky.dev, kostenlos, ohne Key). `/alerts?lat=&lon=` liefert
  * die Warnungen der Gemeinde am Standort. Es gelten die Nutzungsbedingungen des DWD.
+ * Außerhalb Deutschlands antwortet Bright Sky mit 404 „Requested position is
+ * not covered by the DWD“ (geprüft 11/2026): Dort gibt es keine DWD-Warnungen.
  */
 
 import { formatClock, formatDayMonth, localDayNumber } from "./format"
 import { round, type Coordinates } from "./geo"
 
-export const BRIGHTSKY_ALERTS_URL = "https://api.brightsky.dev/alerts"
+const BRIGHTSKY_ALERTS_URL = "https://api.brightsky.dev/alerts"
 
 /** DWD-Warnstufe: 1 Wetterwarnung, 2 markant, 3 Unwetter, 4 extremes Unwetter */
 export type WarningLevel = 1 | 2 | 3 | 4
@@ -15,7 +17,7 @@ export type WarningLevel = 1 | 2 | 3 | 4
 const LEVELS: Record<string, WarningLevel> = { minor: 1, moderate: 2, severe: 3, extreme: 4 }
 
 /** Ab dieser Stufe zeigt das Widget eine Warnung (deine Wahl: nur Unwetter) */
-export const MIN_WARNING_LEVEL: WarningLevel = 3
+const MIN_WARNING_LEVEL: WarningLevel = 3
 /** Warnungen, die so bald beginnen, werden schon angekündigt */
 const HORIZON_HOURS = 24
 
@@ -31,6 +33,13 @@ export interface Alert {
 
 export function buildAlertsUrl(place: Coordinates): string {
   return `${BRIGHTSKY_ALERTS_URL}?lat=${round(place.lat, 3)}&lon=${round(place.lon, 3)}`
+}
+
+/** Warnungen aus einer Bright-Sky-Antwort. Ein Ort außerhalb Deutschlands hat keine. */
+export function alertsFromResponse(status: number, body: unknown): Alert[] {
+  if (status === 404 && isRecord(body) && typeof body["detail"] === "string" && /not covered/i.test(body["detail"])) return []
+  if (status < 200 || status >= 300) throw new Error(`Bright Sky: HTTP ${status}`)
+  return parseAlerts(body)
 }
 
 /** Liest die Bright-Sky-Antwort. Testmeldungen und unvollständige Einträge fallen weg. */

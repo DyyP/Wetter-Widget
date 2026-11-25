@@ -14,18 +14,23 @@ import { getText } from "./http"
 import { ensureDirectory, sharedDirectory } from "./storage"
 
 /**
- * Bei jeder Änderung am Rendern hochzählen: Dann entsteht ein neuer Ordner,
- * und der alte wird gelöscht.
+ * Bei jeder Änderung am Rendern hochzählen und den alten Ordner in
+ * `obsoletePaths` eintragen. Bis zum nächsten „Jetzt aktualisieren“ in der
+ * App fehlen dem Widget dann die Icons, es zeigt so lange einen Hinweis.
  */
 const RENDER_VERSION = 2
 const ICON_DIR = `${sharedDirectory}/icons-v${RENDER_VERSION}`
-const OBSOLETE_ICON_DIRS = [`${sharedDirectory}/icons`]
-/** Render-Größe in pt. Reicht für die 36- und 30-pt-Icons im Widget. */
+/** Die SVGs braucht nur das Rendern: Sie liegen im temporären Ordner der App. */
+const SVG_DIR = `${FileManager.temporaryDirectory}/wetter-icons`
+/** Render-Größe in pt. Reicht für die 37- und 31-pt-Icons im Widget. */
 const RENDER_WIDTH = 48
 const RENDER_SCALE = 3
 
-const svgPath = (name: string) => `${ICON_DIR}/${name}`
+const svgPath = (name: string) => `${SVG_DIR}/${name}`
 const pngPath = (name: string) => `${ICON_DIR}/${name.replace(/\.svg$/, "")}@${RENDER_SCALE}x.png`
+
+/** Reste älterer Versionen: Icon-Ordner bis 0.2.5 und SVGs, die bis 0.2.9 neben den PNGs lagen */
+const obsoletePaths = () => [`${sharedDirectory}/icons`, ...allIconNames().map((name) => `${ICON_DIR}/${name}`)]
 
 /** Für das Widget: Icon-Name → Pfad des fertigen PNG, nur für vorhandene Icons */
 export async function renderedIcons(names: string[]): Promise<Map<string, string>> {
@@ -40,11 +45,11 @@ export async function renderedIcons(names: string[]): Promise<Map<string, string
  */
 export async function prepareIcons(): Promise<{ ready: number; total: number }> {
   await Promise.all(
-    OBSOLETE_ICON_DIRS.map(async (dir) => {
-      if (await FileManager.exists(dir)) await FileManager.remove(dir)
+    obsoletePaths().map(async (path) => {
+      if (await FileManager.exists(path)) await FileManager.remove(path)
     }),
   )
-  await ensureDirectory(ICON_DIR)
+  await Promise.all([ensureDirectory(ICON_DIR), ensureDirectory(SVG_DIR)])
   const names = allIconNames()
   const missing = (await Promise.all(names.map(async (name) => ((await FileManager.exists(pngPath(name))) ? null : name)))).filter(
     (name): name is string => name !== null,
@@ -70,6 +75,7 @@ export async function prepareIcons(): Promise<{ ready: number; total: number }> 
     )
     const png = image.toPNGData()
     if (png !== null) await FileManager.writeAsData(pngPath(name), png)
+    await FileManager.remove(svgPath(name))
   }
 
   const ready = (await renderedIcons(names)).size

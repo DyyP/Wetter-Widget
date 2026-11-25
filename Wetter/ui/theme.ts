@@ -31,6 +31,8 @@ export const theme = {
     text: "#ffffff",
     textDim: "rgba(255,255,255,0.65)",
     rain: "#5cb5ff",
+    /** Hinweis am Trenner, der ein Eingreifen braucht (meteoblue-Key prüfen) */
+    notice: "#ff9f0a",
     nowBackground: "rgba(255,255,255,0.07)",
     sunBackground: "rgba(36,24,0,0.9)",
     quality,

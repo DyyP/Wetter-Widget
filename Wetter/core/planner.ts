@@ -5,8 +5,10 @@
  */
 
 import { distanceKm, localDateString, type Coordinates } from "./geo"
+import type { MeteoblueFailure } from "./meteoblue"
 
 const MINUTE = 60_000
+const HOUR = 3_600_000
 const DAY = 86_400_000
 
 export interface SourceState {
@@ -14,7 +16,8 @@ export interface SourceState {
   lastSuccess: number | null
   /** Letzter Versuch, UTC in ms */
   lastAttempt: number | null
-  lastAttemptOk: boolean | null
+  /** Fehlermeldung des letzten Versuchs, null wenn er geklappt hat */
+  lastError: string | null
   /** Für welchen Ort die gespeicherten Daten gelten */
   location: Coordinates | null
 }
@@ -22,10 +25,12 @@ export interface SourceState {
 export interface MeteoblueState extends SourceState {
   /** Zeitpunkte abgerechneter Abrufe, für das Budget */
   billedCalls: number[]
+  /** Art des letzten Fehlers, null wenn der letzte Versuch geklappt hat */
+  lastFailure: MeteoblueFailure | null
 }
 
-export const EMPTY_SOURCE: SourceState = { lastSuccess: null, lastAttempt: null, lastAttemptOk: null, location: null }
-export const EMPTY_METEOBLUE: MeteoblueState = { ...EMPTY_SOURCE, billedCalls: [] }
+export const EMPTY_SOURCE: SourceState = { lastSuccess: null, lastAttempt: null, lastError: null, location: null }
+export const EMPTY_METEOBLUE: MeteoblueState = { ...EMPTY_SOURCE, billedCalls: [], lastFailure: null }
 
 /**
  * Wer den Abruf auslöst:
@@ -53,13 +58,19 @@ export const METEOBLUE_PLAN = {
   dailyMax: 6,
   /** Ab dieser Entfernung zum Ort der Daten wird neu abgerufen */
   moveThresholdKm: 5,
-  /** Wartezeit nach einem Fehlversuch */
+  /** Wartezeit nach einem vorübergehenden Fehler (Netz, Server, zu viele Anfragen) */
   retryMinutes: 20,
   /** Ein planmäßiger Abruf entfällt, wenn der letzte so kurz zurückliegt */
   minGapMinutes: 120,
   /** Beim Antippen gelten Daten ab diesem Alter als veraltet */
   tapMaxAgeMinutes: 180,
 } as const
+
+/**
+ * Fehler, die baldiges Wiederholen nicht behebt: Key abgelehnt, Anfrage
+ * fehlerhaft, Antwort unbrauchbar. Neuer Versuch erst im nächsten Zeitfenster.
+ */
+const PERSISTENT_FAILURES: ReadonlySet<MeteoblueFailure> = new Set(["access", "request", "format"])
 
 export type MeteoblueDecision =
   | { fetch: true; reason: "no-data" | "moved" | "slot" | "tap" | "manual" }
@@ -72,26 +83,39 @@ export function decideMeteoblue(state: MeteoblueState, ctx: Context): MeteoblueD
     return { fetch: false, reason: "daily-max" }
   }
   if (ctx.trigger === "manual") return { fetch: true, reason: "manual" }
-  if (inRetryWait(state, ctx.now, plan.retryMinutes)) return { fetch: false, reason: "retry-wait" }
-  // Ohne Daten wird immer abgerufen, sonst bliebe das Widget leer.
-  if (!ctx.hasData || state.lastSuccess === null) return { fetch: true, reason: "no-data" }
+  if (meteoblueRetryWait(state, ctx.now)) return { fetch: false, reason: "retry-wait" }
 
   const budgetLeft = state.billedCalls.filter((t) => t > ctx.now - 7 * DAY && t <= ctx.now).length < plan.weeklyBudget
-  if (movedFrom(state, ctx.here, plan.moveThresholdKm)) {
-    return budgetLeft ? { fetch: true, reason: "moved" } : { fetch: false, reason: "budget" }
-  }
+  const within = (reason: "no-data" | "moved" | "slot" | "tap"): MeteoblueDecision =>
+    budgetLeft ? { fetch: true, reason } : { fetch: false, reason: "budget" }
+
+  // Ohne Daten bliebe das Widget leer: sofort abrufen, solange Budget da ist.
+  if (!ctx.hasData || state.lastSuccess === null) return within("no-data")
+  if (movedFrom(state, ctx.here, plan.moveThresholdKm)) return within("moved")
   const due =
     state.lastSuccess < lastSlotStart(ctx.now, plan.slotHours) && state.lastSuccess < ctx.now - plan.minGapMinutes * MINUTE
-  if (due) return budgetLeft ? { fetch: true, reason: "slot" } : { fetch: false, reason: "budget" }
-  if (ctx.trigger === "tap" && state.lastSuccess < ctx.now - plan.tapMaxAgeMinutes * MINUTE) {
-    return budgetLeft ? { fetch: true, reason: "tap" } : { fetch: false, reason: "budget" }
-  }
+  if (due) return within("slot")
+  if (ctx.trigger === "tap" && state.lastSuccess < ctx.now - plan.tapMaxAgeMinutes * MINUTE) return within("tap")
   return { fetch: false, reason: "up-to-date" }
 }
 
 /** Neuer Zustand nach einem erfolgreichen meteoblue-Abruf (Abrufe älter als 8 Tage fallen weg). */
 export function meteoblueSuccess(state: MeteoblueState, here: Coordinates, now: number): MeteoblueState {
-  return { ...sourceSuccess(here, now), billedCalls: [...state.billedCalls.filter((t) => t > now - 8 * DAY), now] }
+  return { ...sourceSuccess(here, now), billedCalls: [...recentCalls(state, now), now], lastFailure: null }
+}
+
+/**
+ * Neuer Zustand nach einem gescheiterten meteoblue-Abruf. Eine unbrauchbare
+ * Antwort mit HTTP 200 („format“) hat meteoblue abgerechnet, sie zählt ins Budget.
+ */
+export function meteoblueFailure(state: MeteoblueState, now: number, failure: MeteoblueFailure, message: string): MeteoblueState {
+  const billedCalls = failure === "format" ? [...recentCalls(state, now), now] : state.billedCalls
+  return { ...sourceFailure(state, now, message), billedCalls, lastFailure: failure }
+}
+
+/** meteoblue lehnt den Key ab: ungültig, abgelaufen oder ohne Credits */
+export function meteoblueKeyRejected(state: MeteoblueState): boolean {
+  return state.lastFailure === "access"
 }
 
 /** Beginn des letzten Abruf-Zeitfensters vor `now` (Ortszeit des Geräts). */
@@ -105,6 +129,17 @@ export function lastSlotStart(now: number, slotHours: readonly number[]): number
     }
   }
   return now - DAY
+}
+
+/** Längste planmäßige Pause zwischen zwei Zeitfenstern in ms, bei 06/12/17 Uhr: 17 → 6 Uhr = 13 h */
+export function longestSlotGap(slotHours: readonly number[]): number {
+  const hours = [...slotHours].sort((a, b) => a - b)
+  const gaps = hours.map((hour, i) => {
+    // Nach dem letzten Fenster des Tages kommt das erste des nächsten Tages
+    const next = hours[i + 1] ?? (hours[0] ?? hour) + 24
+    return (next - hour) * HOUR
+  })
+  return Math.max(...gaps)
 }
 
 /**
@@ -139,11 +174,24 @@ export function decideWarnings(state: SourceState, ctx: Context): boolean {
 }
 
 export function sourceSuccess(here: Coordinates, now: number): SourceState {
-  return { lastSuccess: now, lastAttempt: now, lastAttemptOk: true, location: here }
+  return { lastSuccess: now, lastAttempt: now, lastError: null, location: here }
 }
 
-export function sourceFailure<S extends SourceState>(state: S, now: number): S {
-  return { ...state, lastAttempt: now, lastAttemptOk: false }
+export function sourceFailure<S extends SourceState>(state: S, now: number, message: string): S {
+  return { ...state, lastAttempt: now, lastError: message }
+}
+
+/** Nach vorübergehenden Fehlern kurz warten, nach dauerhaften bis zum nächsten Zeitfenster */
+function meteoblueRetryWait(state: MeteoblueState, now: number): boolean {
+  if (state.lastError === null || state.lastAttempt === null) return false
+  if (state.lastFailure !== null && PERSISTENT_FAILURES.has(state.lastFailure)) {
+    return state.lastAttempt >= lastSlotStart(now, METEOBLUE_PLAN.slotHours)
+  }
+  return now - state.lastAttempt < METEOBLUE_PLAN.retryMinutes * MINUTE
+}
+
+function recentCalls(state: MeteoblueState, now: number): number[] {
+  return state.billedCalls.filter((t) => t > now - 8 * DAY)
 }
 
 function lastUtcUpdate(time: number): number {
@@ -163,5 +211,5 @@ function movedFrom(state: SourceState, here: Coordinates | null, thresholdKm: nu
 }
 
 function inRetryWait(state: SourceState, now: number, minutes: number): boolean {
-  return state.lastAttemptOk === false && state.lastAttempt !== null && now - state.lastAttempt < minutes * MINUTE
+  return state.lastError !== null && state.lastAttempt !== null && now - state.lastAttempt < minutes * MINUTE
 }

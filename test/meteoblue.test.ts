@@ -4,6 +4,7 @@ import {
   buildBasicForecastUrl,
   creditsAccounted,
   errorFromResponse,
+  failureKind,
   parseBasicForecast,
   redactApiKey,
   toUtcMillis,
@@ -74,6 +75,17 @@ describe("parseBasicForecast", () => {
     expect(() => parseBasicForecast(text)).toThrow(/temperature_max\[1\]/)
     expect(() => parseBasicForecast({ error: true, error_message: "Invalid apikey" })).toThrow("Invalid apikey")
   })
+
+  it("wertet jede unbrauchbare Antwort als abgerechneten Formatfehler", () => {
+    for (const body of [null, { error: true, error_message: "x" }, { metadata: {} }]) {
+      try {
+        parseBasicForecast(body)
+        expect.unreachable()
+      } catch (error) {
+        expect(failureKind(error)).toBe("format")
+      }
+    }
+  })
 })
 
 describe("Fehler und Credits", () => {
@@ -84,6 +96,11 @@ describe("Fehler und Credits", () => {
     expect(errorFromResponse(429, null).kind).toBe("rate-limit")
     expect(errorFromResponse(503, "x").kind).toBe("server")
     expect(errorFromResponse(400, {}).message).toBe("HTTP 400")
+  })
+
+  it("erkennt Netzfehler", () => {
+    expect(failureKind(new TypeError("The Internet connection appears to be offline."))).toBe("network")
+    expect(failureKind(errorFromResponse(401, null))).toBe("access")
   })
 
   it("liest MB-Credits-Accounted", () => {

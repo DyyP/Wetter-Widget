@@ -9,16 +9,21 @@ import { formatClock, formatRelativeDay } from "./format"
 import { addDays, localDateString, weekday } from "./geo"
 import type { Forecast, HourlyPoint } from "./meteoblue"
 import { dailyIconName, hourlyIconName, isDailyPictocode, isHourlyPictocode } from "./picto"
+import { METEOBLUE_PLAN, longestSlotGap } from "./planner"
 import { sunTimes } from "./sun"
 import { qualityLabel, qualityLevel, type QualityLevel, type SunEvent, type SunEventType } from "./sunsethue"
 
 /** Stunden-Spalten plus höchstens ein Sonnen-Slot */
-export const SLOT_COUNT = 6
-export const DAY_COUNT = 5
+const SLOT_COUNT = 6
+const DAY_COUNT = 5
 /** Ein gerade vergangenes Sonnenereignis bleibt so lange sichtbar (wie bisher) */
 const SUN_GRACE_MS = 10 * 60_000
-/** Ab diesem Alter der Daten erscheint ein dezenter Hinweis */
-const STALE_AFTER_MS = 12 * 3_600_000
+/**
+ * Ab diesem Alter der Daten erscheint „Stand …“: wenn mindestens ein
+ * Abruf-Zeitfenster verpasst wurde. Längste planmäßige Pause (17 → 6 Uhr,
+ * 13 h) plus 3 h Puffer, weil iOS Widget-Durchläufe auch mal verschiebt.
+ */
+const STALE_AFTER_MS = longestSlotGap(METEOBLUE_PLAN.slotHours) + 3 * 3_600_000
 const WEEKDAYS = ["SO", "MO", "DI", "MI", "DO", "FR", "SA"]
 
 export interface HourSlot {
@@ -66,6 +71,17 @@ export interface WarningRow {
   level: WarningLevel
 }
 
+/**
+ * Hinweis am Trenner, wenn keine Warnung da ist:
+ * - "key": meteoblue lehnt den Key ab, die Daten werden nicht mehr frisch
+ * - "stale": mindestens ein Abruf-Zeitfenster wurde verpasst
+ */
+export interface Notice {
+  kind: "key" | "stale"
+  /** "meteoblue-Key prüfen · Stand gestern 17:02", "Stand gestern 17:02" */
+  text: string
+}
+
 export interface WidgetModel {
   slots: Slot[]
   days: DayColumn[]
@@ -77,8 +93,7 @@ export interface WidgetModel {
   /** Ob die Tagesreihe eine Regenzeile braucht */
   dayRainRow: boolean
   warning: WarningRow | null
-  /** "Stand gestern 17:02", nur wenn die Daten älter als 12 Stunden sind */
-  staleHint: string | null
+  notice: Notice | null
   /** Wann das Widget frühestens neu gezeichnet werden soll: Beginn der nächsten Stunde */
   nextRefresh: number
 }
@@ -92,6 +107,8 @@ export interface ModelInput {
   fetchedAt: number | null
   sunEvents: SunEvent[]
   alerts: Alert[]
+  /** meteoblue hat den Key beim letzten Versuch abgelehnt */
+  keyRejected: boolean
 }
 
 export function buildModel(input: ModelInput): ModelResult {
@@ -111,7 +128,6 @@ export function buildModel(input: ModelInput): ModelResult {
 
   const warningAlert = relevantAlerts(input.alerts, now)[0]
   const warning = warningAlert === undefined ? null : { text: alertText(warningAlert, now), level: warningAlert.level }
-  const stale = input.fetchedAt !== null && now - input.fetchedAt > STALE_AFTER_MS ? input.fetchedAt : null
 
   const visibleSlots = slots.slice(0, SLOT_COUNT)
   const days = dayColumns(forecast, input.sunEvents, now)
@@ -123,7 +139,7 @@ export function buildModel(input: ModelInput): ModelResult {
       hourRainRow: visibleSlots.some((slot) => slot.kind === "sun" || slot.rain !== null),
       dayRainRow: days.some((day) => day.rain !== null),
       warning,
-      staleHint: stale === null ? null : `Stand ${formatRelativeDay(stale, now)}`,
+      notice: noticeFor(input),
       nextRefresh: startOfNextHour(now),
     },
   }
@@ -132,6 +148,13 @@ export function buildModel(input: ModelInput): ModelResult {
 /** Alle Icons, die ein Modell braucht */
 export function modelIconNames(model: WidgetModel): string[] {
   return [...model.slots.map((slot) => slot.icon), ...model.days.map((day) => day.icon)]
+}
+
+function noticeFor({ now, fetchedAt, keyRejected }: ModelInput): Notice | null {
+  if (fetchedAt === null) return keyRejected ? { kind: "key", text: "meteoblue-Key prüfen" } : null
+  const stand = `Stand ${formatRelativeDay(fetchedAt, now)}`
+  if (keyRejected) return { kind: "key", text: `meteoblue-Key prüfen · ${stand}` }
+  return now - fetchedAt > STALE_AFTER_MS ? { kind: "stale", text: stand } : null
 }
 
 function hourSlot(hour: HourlyPoint, isNow: boolean): HourSlot {
@@ -218,7 +241,7 @@ export function roundTemperature(value: number): number {
   return rounded === 0 ? 0 : rounded
 }
 
-export function startOfNextHour(now: number): number {
+function startOfNextHour(now: number): number {
   const d = new Date(now)
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + 1).getTime()
 }

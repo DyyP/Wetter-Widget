@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { alertText, buildAlertsUrl, parseAlerts, relevantAlerts } from "../Wetter/core/dwd"
+import { alertText, alertsFromResponse, buildAlertsUrl, parseAlerts, relevantAlerts } from "../Wetter/core/dwd"
 import sample from "./fixtures/brightsky-alerts.sample.json"
 
 const alerts = parseAlerts(sample)
@@ -51,5 +51,21 @@ describe("alertText", () => {
 describe("buildAlertsUrl", () => {
   it("baut die Bright-Sky-URL", () => {
     expect(buildAlertsUrl({ lat: 52.520008, lon: 13.404954 })).toBe("https://api.brightsky.dev/alerts?lat=52.52&lon=13.405")
+  })
+})
+
+describe("alertsFromResponse", () => {
+  it("liefert außerhalb Deutschlands keine Warnungen statt eines Fehlers", () => {
+    // Antwort von Bright Sky für Wien, geprüft 11/2026
+    expect(alertsFromResponse(404, { detail: "Requested position is not covered by the DWD" })).toEqual([])
+  })
+
+  it("meldet andere Fehler weiter", () => {
+    expect(() => alertsFromResponse(404, { detail: "Not Found" })).toThrow("HTTP 404")
+    expect(() => alertsFromResponse(503, null)).toThrow("HTTP 503")
+  })
+
+  it("liest eine normale Antwort", () => {
+    expect(alertsFromResponse(200, sample)).toEqual(alerts)
   })
 })

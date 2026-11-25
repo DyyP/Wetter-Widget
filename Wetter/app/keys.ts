@@ -3,6 +3,7 @@
 import { maskSecret } from "../core/format"
 import type { SecretName } from "../platform/secrets"
 import { deleteSecret, readSecret, saveSecret } from "../platform/secrets"
+import { refreshNow } from "./refreshNow"
 
 const LABELS: Record<SecretName, string> = {
   meteoblue: "meteoblue",
@@ -43,13 +44,13 @@ async function enterKey(name: SecretName): Promise<void> {
     await Dialog.alert({ title: "Nicht gespeichert", message: "Der Key war leer." })
     return
   }
-  const saved = saveSecret(name, value)
-  await Dialog.alert({
-    title: saved ? "Gespeichert" : "Fehler",
-    message: saved
-      ? `${LABELS[name]}-Key ${maskSecret(value)} ist im Schlüsselbund.`
-      : "Der Schlüsselbund hat das Speichern abgelehnt. Bitte noch einmal versuchen.",
-  })
+  if (!saveSecret(name, value)) {
+    await Dialog.alert({ title: "Fehler", message: "Der Schlüsselbund hat das Speichern abgelehnt. Bitte noch einmal versuchen." })
+    return
+  }
+  await Dialog.alert({ title: "Gespeichert", message: `${LABELS[name]}-Key ${maskSecret(value)} ist im Schlüsselbund.` })
+  // Mit neuem Key gleich prüfen, ob er funktioniert, statt auf das nächste Zeitfenster zu warten
+  await refreshNow()
 }
 
 async function deleteAllKeys(): Promise<void> {
