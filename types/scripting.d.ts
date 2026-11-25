@@ -86,7 +86,8 @@ declare module "scripting" {
     children?: Children
     padding?: Padding
     frame?: Frame
-    background?: DynamicColor
+    /** Farbe oder Farbe in Form, z. B. abgerundetes Rechteck hinter dem JETZT-Slot */
+    background?: DynamicColor | { style: DynamicColor; shape: { type: "rect"; cornerRadius: number } }
     foregroundStyle?: DynamicColor
     opacity?: number
     font?: Font
@@ -117,10 +118,38 @@ declare module "scripting" {
     minLength?: number
   }
 
+  interface ImageRenderingProps {
+    /** true: Bild füllt den Rahmen (Seitenverhältnis über `frame` setzen) */
+    resizable?: boolean
+    interpolation?: "none" | "low" | "medium" | "high"
+    antialiased?: boolean
+    renderingMode?: "original" | "template"
+  }
+
+  interface SVGProps extends CommonViewProps, ImageRenderingProps {
+    filePath?: string
+    code?: string
+    url?: string
+  }
+
+  interface ImageProps extends CommonViewProps, ImageRenderingProps {
+    /** Name eines SF Symbols */
+    systemName?: string
+    filePath?: string
+    scaleToFit?: boolean
+  }
+
+  interface ShapeProps extends CommonViewProps {
+    fill?: DynamicColor
+  }
+
   function VStack(props: VStackProps): VirtualNode
   function HStack(props: HStackProps): VirtualNode
   function Spacer(props: SpacerProps): VirtualNode
   function Text(props: CommonViewProps): VirtualNode
+  function SVG(props: SVGProps): VirtualNode
+  function Image(props: ImageProps): VirtualNode
+  function Circle(props: ShapeProps): VirtualNode
 
   type WidgetFamily =
     | "systemSmall"
@@ -139,6 +168,8 @@ declare module "scripting" {
     static readonly displaySize: { width: number; height: number }
     static readonly parameter: string
     static present(element: VirtualNode, reloadPolicy?: WidgetReloadPolicy): void
+    /** Vorschau in der App (nur index.tsx), rendert widget.tsx */
+    static preview(options?: { family?: WidgetFamily; parameters?: { options: Record<string, string>; default: string } }): Promise<void>
     static reloadAll(): void
     static reloadUserWidgets(): Promise<void> | void
   }
@@ -157,6 +188,10 @@ declare module "scripting" {
 // ---------------------------------------------------------------------------
 // Globale APIs (in Scripting ohne Import verfügbar)
 // ---------------------------------------------------------------------------
+
+/** Timer laut Doku „Script Timers and Scheduling“ (Node-kompatibel) */
+declare function setTimeout(handler: () => void, milliseconds?: number): number
+declare function clearTimeout(id: number | undefined): void
 
 declare const console: {
   log(...args: unknown[]): void

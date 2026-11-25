@@ -41,6 +41,15 @@ describe("Render-Protokoll", () => {
     expect(stats.last?.time).toBe(now)
   })
 
+  it("ignoriert Mehrfachzeichnungen direkt hintereinander", () => {
+    const now = Date.UTC(2026, 10, 25, 12, 0)
+    const log = [now - 60 * MIN, now - 59.8 * MIN, now - 59.5 * MIN, now - 30 * MIN, now].map(entry)
+    const stats = summarizeRenders(log, now)
+    expect(stats.last24h).toBe(5)
+    // Abstände 0,2 und 0,3 min fallen weg, bleiben 29,5 und 30 min
+    expect(stats.medianGapMinutes).toBe(29.8)
+  })
+
   it("kommt mit leerem Protokoll aus", () => {
     expect(summarizeRenders([], 0)).toEqual({ last24h: 0, medianGapMinutes: null, maxGapMinutes: null, last: null })
   })

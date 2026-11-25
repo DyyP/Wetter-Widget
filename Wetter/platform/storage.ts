@@ -4,11 +4,12 @@
  * aus ist), damit du sie in der Dateien-App findest.
  */
 
-const SHARED_DIR = `${FileManager.appGroupDocumentsDirectory}/wetter-widget`
+/** Gemeinsamer Ordner von App und Widget */
+export const sharedDirectory = `${FileManager.appGroupDocumentsDirectory}/wetter-widget`
 
 export const sharedFiles = {
-  renderLog: `${SHARED_DIR}/render-log.txt`,
-  lastProbe: `${SHARED_DIR}/last-probe.json`,
+  renderLog: `${sharedDirectory}/render-log.txt`,
+  lastProbe: `${sharedDirectory}/last-probe.json`,
 } as const
 
 /** Ordner für Dateien, die du in der Dateien-App öffnen oder teilen kannst. */

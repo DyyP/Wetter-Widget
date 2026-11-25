@@ -38,6 +38,9 @@ export function parseRenderLog(text: string): RenderEntry[] {
   return entries.sort((a, b) => a.time - b.time)
 }
 
+/** Abstände darunter gelten als Mehrfachzeichnung und zählen nicht zum Rhythmus */
+const MIN_GAP_MINUTES = 2
+
 export interface RenderStats {
   /** Durchläufe in den letzten 24 Stunden */
   last24h: number
@@ -56,7 +59,11 @@ export function summarizeRenders(entries: RenderEntry[], now: number): RenderSta
   for (let i = 1; i < recent.length; i++) {
     const previous = recent[i - 1]
     const current = recent[i]
-    if (previous && current) gaps.push((current.time - previous.time) / 60_000)
+    if (!previous || !current) continue
+    const gap = (current.time - previous.time) / 60_000
+    // iOS zeichnet beim Hinzufügen oder Bearbeiten mehrmals direkt hintereinander.
+    // Solche Kurz-Abstände sagen nichts über den Rhythmus aus.
+    if (gap >= MIN_GAP_MINUTES) gaps.push(gap)
   }
   return {
     last24h: recent.length,

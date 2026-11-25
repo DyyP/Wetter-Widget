@@ -3,6 +3,7 @@
 import { Script, Widget } from "scripting"
 import { manageKeys } from "./keys"
 import { runProbe } from "./probe"
+import { refreshNow } from "./refreshNow"
 import { showStatus } from "./status"
 
 export async function runMenu(): Promise<void> {
@@ -10,21 +11,19 @@ export async function runMenu(): Promise<void> {
   for (;;) {
     const choice = await Dialog.actionSheet({
       title: `Wetter-Widget ${version}`,
-      message: "Meilenstein 1: Einrichtung und Test-Abruf",
       actions: [
+        { label: "Widget-Vorschau" },
+        { label: "Jetzt aktualisieren (8.000 Credits)" },
         { label: "Status anzeigen" },
         { label: "API-Keys einrichten" },
-        { label: "Test-Abruf (8.000 Credits)" },
-        { label: "Widget neu zeichnen" },
+        { label: "Rohantwort speichern (Diagnose, 8.000 Credits)" },
       ],
     })
     if (choice === null) return
-    if (choice === 0) await showStatus()
-    else if (choice === 1) await manageKeys()
-    else if (choice === 2) await runProbe()
-    else if (choice === 3) {
-      Widget.reloadAll()
-      await Dialog.alert({ title: "Angefordert", message: "iOS zeichnet das Widget in Kürze neu." })
-    }
+    if (choice === 0) await Widget.preview({ family: "systemMedium" })
+    else if (choice === 1) await refreshNow()
+    else if (choice === 2) await showStatus()
+    else if (choice === 3) await manageKeys()
+    else if (choice === 4) await runProbe()
   }
 }

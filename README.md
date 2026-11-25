@@ -4,21 +4,28 @@ Mittleres Home-Bildschirm-Widget für die iOS-App [Scripting](https://apps.apple
 Es zeigt Wetterdaten von [meteoblue](https://www.meteoblue.com) mit den offiziellen meteoblue-Icons,
 die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtliche DWD-Unwetterwarnungen.
 
-## Stand: Meilenstein 1 – Fundament und Kassensturz
+## Stand: Meilenstein 2 – Neubau mit deinem Look
 
 | Meilenstein | Inhalt | Status |
 |---|---|---|
-| M1 | Projektgerüst, API-Keys im Schlüsselbund, Test-Abruf mit Credit-Messung, Diagnose-Widget | **aktuell** |
-| M2 | Neubau mit deinem Look: Abruf-Planer, Sonnen-Slot, DWD-Warnungen, offizielle SVG-Icons | geplant |
+| M1 | Projektgerüst, API-Keys im Schlüsselbund, Test-Abruf mit Credit-Messung, Diagnose-Widget | erledigt |
+| M2 | Echtes Widget: Abruf-Planer, Sonnen-Slot, DWD-Warnungen, offizielle SVG-Icons | **aktuell** |
 | M3 | Look-Feinschliff mit Theme, Demo-Szenarien und Vorschau | geplant |
 | M4 | Extras nach Wahl | geplant |
 
-Das Widget aus M1 ruft noch **kein** Wetter ab. Es prüft, was das spätere Widget braucht:
+Was das Widget zeigt:
 
-- Kann das Widget die API-Keys aus dem Schlüsselbund lesen?
-- Darf es den Standort abfragen?
-- Wie groß ist es auf deinem iPhone wirklich?
-- Wie oft zeichnet iOS es neu?
+- **Stundenreihe:** JETZT plus die nächsten Stunden mit offiziellem meteoblue-Icon (Tag/Nacht), Temperatur, gefühlter Temperatur und Regen.
+- **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung.
+- **Tagesreihe:** HEUTE plus 4 Tage mit Tages-Icon, Max/Min und Regen. Ein farbiger Punkt zeigt die Sonnenuntergangs-Qualität für heute bis übermorgen.
+- **Warnzeile:** Sie erscheint nur bei amtlichen DWD-Unwettern ab Stufe 3 (rot) bzw. 4 (violett), mit Text und Uhrzeit.
+- **Antippen** öffnet die meteoblue-App an deinem Ort.
+
+So bleibt es aktuell, ohne das Credit-Kontingent zu sprengen:
+
+- **meteoblue:** Abruf um 06, 12 und 17 Uhr (jeweils beim ersten Widget-Durchlauf danach) und bei Ortswechsel über 5 km. Höchstens 23 Abrufe in 7 Tagen, das sind hochgerechnet 9,6 Mio. von 10 Mio. Credits pro Jahr.
+- **Dazwischen** rechnet das Widget jede volle Stunde aus den gespeicherten Stundenwerten neu. „JETZT“ stimmt also immer.
+- **Sunsethue** nach jedem seiner 6-Stunden-Updates, **DWD-Warnungen** alle 30 Minuten. Beides kostet keine meteoblue-Credits.
 
 ## Installation auf dem iPhone
 
@@ -44,9 +51,11 @@ Das Widget aus M1 ruft noch **kein** Wetter ab. Es prüft, was das spätere Widg
      ```
 3. **Script `Wetter` in der App starten** und im Menü:
    1. **API-Keys einrichten:** meteoblue- und Sunsethue-Key eingeben. Sie werden nur im Schlüsselbund dieses iPhones gespeichert und nie ins Repo geschrieben.
-   2. **Test-Abruf (8.000 Credits):** prüft Key und Credits. Die Antwort wird als Datei gespeichert unter Dateien-App → iCloud Drive → Scripting → `Wetter-Widget`.
+   2. **Jetzt aktualisieren:** holt einmal alle Daten und merkt sich deinen Standort. Danach arbeitet das Widget selbstständig.
+   3. **Widget-Vorschau:** zeigt das Widget direkt in der App.
 4. **Widget hinzufügen:** Home-Bildschirm lange drücken → `+` → Scripting → mittleres Widget. Dann das Widget lange drücken → *Widget bearbeiten* → Script `Wetter`.
 5. **Standort für Widgets erlauben:** iOS-Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → Scripting → *Beim Verwenden der App oder Widgets*.
+6. **Diagnose:** Mit dem Widget-Parameter `diagnose` zeigt ein Widget stattdessen Keys, Standortfreigabe, Größe und den Aktualisierungs-Rhythmus. *Status anzeigen* im App-Menü zeigt zusätzlich die letzten Abrufe und das Budget.
 
 ## Credits
 
@@ -66,12 +75,19 @@ npm run check
 ```text
 Wetter/                 Das Scripting-Script (Remote-Quelle für die App)
   script.json           Name, Version, Symbol
-  index.tsx             App-Einstieg: Menü für Einrichtung und Diagnose
-  widget.tsx            Widget-Einstieg
+  index.tsx             App-Einstieg: Menü
+  widget.tsx            Widget-Einstieg: auffrischen, Modell bauen, zeichnen
   core/                 Reine Logik ohne Scripting-APIs, vollständig getestet
-  platform/             Dünne Hüllen um Scripting-APIs (Schlüsselbund, Dateien, Netz, Standort)
-  app/                  Abläufe in der App (Keys, Test-Abruf, Status)
-  ui/                   Widget-Ansichten (TSX)
+    meteoblue.ts        API-URL, Antwortprüfung, Credits
+    sunsethue.ts        Sonnen-Qualität und Bewertung
+    dwd.ts              DWD-Warnungen über Bright Sky
+    sun.ts              Sonnenzeiten offline
+    planner.ts          Wann wird was abgerufen (Zeitfenster, Budget, Ortswechsel)
+    model.ts            Was das Widget zeigt (Slots, Tage, Warnzeile)
+  data/refresh.ts       Abruf-Ablauf für Widget und App
+  platform/             Dünne Hüllen um Scripting-APIs (Schlüsselbund, Dateien, Netz, Standort, Icons)
+  app/                  Abläufe in der App (Keys, Aktualisieren, Status, Diagnose)
+  ui/                   Widget-Ansichten (TSX) und theme.ts mit allen Design-Tokens
 test/                   Vitest-Tests für core/
 types/scripting.d.ts    Typen der genutzten Scripting-APIs (aus der Doku abgeleitet)
 ```
@@ -79,7 +95,8 @@ types/scripting.d.ts    Typen der genutzten Scripting-APIs (aus der Doku abgelei
 ### Regeln
 
 - **Keine Keys im Repo.** Das Repo ist öffentlich, Keys liegen nur im iOS-Schlüsselbund.
-- **Keine meteoblue-Icons im Repo.** Sie gehören meteoblue und werden zur Laufzeit von `static.meteoblue.com` geladen.
+- **Keine meteoblue-Icons im Repo.** Sie gehören meteoblue. Das Widget lädt sie zur Laufzeit von `static.meteoblue.com` und speichert sie auf dem iPhone.
+- **Kein Standort im Repo.** Testdaten nutzen öffentliche Orte (Berlin), nie echte Aufenthaltsorte.
 - **`core/` bleibt rein:** keine globalen Scripting-APIs, damit alles in Node testbar ist.
 - **Offizielle Typen:** Mit `npx scripting-cli start` auf einem Computer im selben WLAN schreibt die App ihre echten Typen nach `dts/`. `types/scripting.d.ts` ist bis dahin der Ersatz.
 
