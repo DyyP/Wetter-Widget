@@ -2,53 +2,37 @@
 
 import { buildAlertsUrl, parseAlerts, type Alert } from "../core/dwd"
 import type { Coordinates } from "../core/geo"
-import { buildBasicForecastUrl, errorFromResponse, parseBasicForecast, readCreditHeaders, type Forecast } from "../core/meteoblue"
-import {
-  SUNSETHUE_KEY_HEADER,
-  buildEventUrl,
-  errorFromSunsethue,
-  parseEvent,
-  type SunEvent,
-  type SunEventQuery,
-} from "../core/sunsethue"
+import { buildBasicForecastUrl, creditsAccounted, errorFromResponse, parseBasicForecast, type Forecast } from "../core/meteoblue"
+import { SUNSETHUE_KEY_HEADER, buildEventUrl, errorFromSunsethue, parseEvent, type SunEvent, type SunEventQuery } from "../core/sunsethue"
 import { getJson } from "./http"
 
-export interface ForecastResult {
-  forecast: Forecast
-  /** Abgerechnete Credits laut Header */
-  credits: number | null
+export async function fetchForecast(
+  apiKey: string,
+  here: Coordinates,
+  timeoutSeconds: number,
+): Promise<{ forecast: Forecast; credits: number | null }> {
+  const response = await getJson(buildBasicForecastUrl(apiKey, here), { timeoutSeconds })
+  if (!response.ok) throw errorFromResponse(response.status, response.body)
+  return { forecast: parseBasicForecast(response.body), credits: creditsAccounted(response.headers) }
 }
 
-export async function fetchForecast(apiKey: string, here: Coordinates): Promise<ForecastResult> {
-  const result = await getJson(buildBasicForecastUrl(apiKey, here), { timeoutSeconds: 12, label: "meteoblue" })
-  if (!result.ok) throw errorFromResponse(result.status, result.body)
-  return { forecast: parseBasicForecast(result.body), credits: readCreditHeaders(result.headers).accounted }
-}
-
-/**
- * Holt mehrere Sonnenereignisse parallel. Einzelne Fehler sind erlaubt;
- * erst wenn alle scheitern, wird der erste Fehler weitergegeben.
- */
-export async function fetchSunEvents(apiKey: string, queries: SunEventQuery[]): Promise<SunEvent[]> {
+/** Mehrere Ereignisse parallel. Einzelne Fehler sind erlaubt, erst wenn alle scheitern, wirft es. */
+export async function fetchSunEvents(apiKey: string, queries: SunEventQuery[], timeoutSeconds: number): Promise<SunEvent[]> {
   const settled = await Promise.allSettled(
     queries.map(async (query) => {
-      const result = await getJson(buildEventUrl(query), {
-        timeoutSeconds: 10,
-        label: `sunsethue ${query.type} ${query.date}`,
-        headers: { [SUNSETHUE_KEY_HEADER]: apiKey },
-      })
-      if (!result.ok) throw errorFromSunsethue(result.status, result.body)
-      return parseEvent(result.body, query)
+      const response = await getJson(buildEventUrl(query), { timeoutSeconds, headers: { [SUNSETHUE_KEY_HEADER]: apiKey } })
+      if (!response.ok) throw errorFromSunsethue(response.status, response.body)
+      return parseEvent(response.body, query)
     }),
   )
   const events = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []))
-  const firstError = settled.find((s): s is PromiseRejectedResult => s.status === "rejected")
-  if (events.length === 0 && firstError !== undefined) throw firstError.reason
+  const failure = settled.find((s): s is PromiseRejectedResult => s.status === "rejected")
+  if (events.length === 0 && failure !== undefined) throw failure.reason
   return events
 }
 
-export async function fetchAlerts(here: Coordinates): Promise<Alert[]> {
-  const result = await getJson(buildAlertsUrl(here.lat, here.lon), { timeoutSeconds: 10, label: "DWD-Warnungen" })
-  if (!result.ok) throw new Error(`Bright Sky: HTTP ${result.status}`)
-  return parseAlerts(result.body)
+export async function fetchAlerts(here: Coordinates, timeoutSeconds: number): Promise<Alert[]> {
+  const response = await getJson(buildAlertsUrl(here), { timeoutSeconds })
+  if (!response.ok) throw new Error(`Bright Sky: HTTP ${response.status}`)
+  return parseAlerts(response.body)
 }

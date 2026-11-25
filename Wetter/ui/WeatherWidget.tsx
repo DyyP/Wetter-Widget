@@ -8,14 +8,12 @@ import { theme } from "./theme"
 const { colors, layout, fonts } = theme
 const DEG = "°"
 
-export interface IconSource {
-  /** Icon-Name → Pfad eines zeichenbaren PNG */
-  paths: Map<string, string>
-}
+/** Icon-Name → Pfad des vorgerenderten PNG */
+type Icons = Map<string, string>
 
-function PictoIcon(props: { name: string; width: number; icons: IconSource }) {
+function PictoIcon(props: { name: string; width: number; icons: Icons }) {
   const height = Math.round(props.width * PICTO_ASPECT * 10) / 10
-  const path = props.icons.paths.get(props.name)
+  const path = props.icons.get(props.name)
   if (path === undefined) return <VStack frame={{ width: props.width, height }} />
   return <Image filePath={path} resizable frame={{ width: props.width, height }} />
 }
@@ -24,7 +22,7 @@ function slotBackground(color: string) {
   return { style: color, shape: { type: "rect" as const, cornerRadius: layout.slotCornerRadius } }
 }
 
-function HourColumn(props: { slot: HourSlot; icons: IconSource }) {
+function HourColumn(props: { slot: HourSlot; icons: Icons }) {
   const { slot } = props
   return (
     <VStack
@@ -52,7 +50,7 @@ function HourColumn(props: { slot: HourSlot; icons: IconSource }) {
   )
 }
 
-function SunColumn(props: { slot: SunSlot; icons: IconSource }) {
+function SunColumn(props: { slot: SunSlot; icons: Icons }) {
   const { slot } = props
   const accent = slot.level === null ? colors.textDim : colors.quality[slot.level]
   return (
@@ -83,7 +81,7 @@ function SunColumn(props: { slot: SunSlot; icons: IconSource }) {
   )
 }
 
-function SlotColumn(props: { slot: Slot; icons: IconSource }) {
+function SlotColumn(props: { slot: Slot; icons: Icons }) {
   return props.slot.kind === "hour" ? (
     <HourColumn slot={props.slot} icons={props.icons} />
   ) : (
@@ -91,7 +89,7 @@ function SlotColumn(props: { slot: Slot; icons: IconSource }) {
   )
 }
 
-function DayColumnView(props: { day: DayColumn; icons: IconSource }) {
+function DayColumnView(props: { day: DayColumn; icons: Icons }) {
   const { day } = props
   return (
     <VStack spacing={0} frame={{ width: layout.dayColumnWidth }}>
@@ -126,7 +124,7 @@ function DayColumnView(props: { day: DayColumn; icons: IconSource }) {
 function WarningLine(props: { warning: WarningRow }) {
   const color = colors.warning[props.warning.level]
   return (
-    <HStack spacing={4} frame={{ width: layout.hourColumnWidth * 6 }}>
+    <HStack spacing={4} frame={{ width: layout.rowWidth }}>
       <Image systemName="exclamationmark.triangle.fill" font={fonts.warning} foregroundStyle={color} />
       <Text font={fonts.warning} fontWeight="bold" foregroundStyle={color} lineLimit={1} minScaleFactor={0.8}>
         {props.warning.text}
@@ -144,7 +142,7 @@ function StaleHint(props: { text: string }) {
   )
 }
 
-export function WeatherWidget(props: { model: WidgetModel; icons: IconSource }) {
+export function WeatherWidget(props: { model: WidgetModel; icons: Icons }) {
   const { model, icons } = props
   return (
     <VStack
@@ -175,7 +173,7 @@ export function WeatherWidget(props: { model: WidgetModel; icons: IconSource }) 
   )
 }
 
-/** Hinweis statt Widget, wenn (noch) keine passenden Daten da sind. */
+/** Hinweis statt Wetter, z. B. ohne Key oder Daten */
 export function MessageWidget(props: { title: string; message: string }) {
   return (
     <VStack spacing={4} padding frame={{ maxWidth: "infinity", maxHeight: "infinity" }} widgetBackground={colors.background}>

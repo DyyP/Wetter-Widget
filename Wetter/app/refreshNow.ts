@@ -1,61 +1,54 @@
-/** „Jetzt aktualisieren“ im App-Menü: alle Quellen sofort abrufen und berichten. */
+/** „Jetzt aktualisieren“: alle Quellen sofort abrufen, Icons vorbereiten, Ergebnis zeigen. */
 
 import { Widget } from "scripting"
 import { formatThousands } from "../core/format"
-import { refresh, type RefreshReport, type SourceOutcome } from "../data/refresh"
-import { allIconNames, prepareIcons } from "../platform/icons"
+import { BASIC_CALL_CREDITS } from "../core/meteoblue"
+import type { MeteoblueDecision } from "../core/planner"
+import { refresh, type Outcome, type RefreshReport } from "../data/refresh"
+import { prepareIcons } from "../platform/icons"
 
 export async function refreshNow(): Promise<void> {
   const confirmed = await Dialog.confirm({
     title: "Jetzt aktualisieren?",
-    message: "Holt meteoblue, Sunsethue und die DWD-Warnungen sofort. Der meteoblue-Abruf kostet 8.000 Credits.",
+    message: `Holt meteoblue, Sunsethue und die DWD-Warnungen sofort. Der meteoblue-Abruf kostet ${formatThousands(BASIC_CALL_CREDITS)} Credits.`,
     confirmLabel: "Aktualisieren",
     cancelLabel: "Abbrechen",
   })
   if (!confirmed) return
-  const report = await refresh(Date.now(), { manual: true })
-  const icons = await prepareIcons()
+  const [report, icons] = await Promise.all([refresh(Date.now(), { manual: true, inWidget: false }), prepareIcons()])
   Widget.reloadAll()
-  await Dialog.alert({
-    title: "Aktualisiert",
-    message: `${describe(report)}\nIcons: ${icons} von ${allIconNames().length} bereit`,
-  })
+  await Dialog.alert({ title: "Aktualisiert", message: `${describe(report)}\nIcons: ${icons.ready} von ${icons.total}` })
 }
 
-export function describe(report: RefreshReport): string {
-  if (report.location === null) return "Kein Standort verfügbar. Bitte Standortzugriff für Scripting erlauben."
-  const lines = [report.locationFromCache ? "Standort: letzter bekannter Ort" : "Standort: aktuell"]
+function describe(report: RefreshReport): string {
+  if (report.location === null) return "Kein Standort. Bitte in den iOS-Einstellungen den Standort für Scripting erlauben."
   const mb = report.meteoblue
-  const credits = mb.credits === null ? "" : `, ${formatThousands(mb.credits)} Credits`
-  lines.push(`meteoblue: ${outcome(mb.outcome, mb.error)}${mb.outcome === "ok" ? credits : ""}`)
-  if (mb.decision !== null && !mb.decision.fetch) lines.push(`  (${skipReason(mb.decision.reason)})`)
-  lines.push(`Sunsethue: ${outcome(report.sunsethue.outcome, report.sunsethue.error)}`)
-  lines.push(`DWD-Warnungen: ${outcome(report.warnings.outcome, report.warnings.error)}`)
+  const credits = mb.outcome === "ok" && mb.credits !== null ? `, ${formatThousands(mb.credits)} Credits` : ""
+  const lines = [
+    report.locationFromCache ? "Standort: letzter bekannter Ort" : "Standort: aktuell",
+    `meteoblue: ${outcome(mb.outcome, mb.error)}${credits}${skipReason(mb.decision)}`,
+    `Sunsethue: ${outcome(report.sunsethue.outcome, report.sunsethue.error)}`,
+    `DWD-Warnungen: ${outcome(report.warnings.outcome, report.warnings.error)}`,
+  ]
   return lines.join("\n")
 }
 
-function outcome(value: SourceOutcome, error: string | null): string {
+function outcome(value: Outcome, error: string | null): string {
   switch (value) {
     case "ok":
       return "ok"
     case "skipped":
       return "nicht nötig"
-    case "unavailable":
-      return "kein Key oder Standort"
+    case "no-key":
+      return "kein Key"
     case "failed":
       return `fehlgeschlagen (${error ?? "unbekannt"})`
   }
 }
 
-function skipReason(reason: string): string {
-  switch (reason) {
-    case "daily-max":
-      return "Tageslimit erreicht"
-    case "budget":
-      return "7-Tage-Budget erreicht"
-    case "retry-wait":
-      return "wartet nach Fehler"
-    default:
-      return "Daten aktuell"
-  }
+function skipReason(decision: MeteoblueDecision | null): string {
+  if (decision === null || decision.fetch) return ""
+  if (decision.reason === "daily-max") return " (Tageslimit erreicht)"
+  if (decision.reason === "budget") return " (7-Tage-Budget erreicht)"
+  return ""
 }

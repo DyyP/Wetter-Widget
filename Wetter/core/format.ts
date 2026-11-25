@@ -1,7 +1,11 @@
 /**
  * Formatierung für die Anzeige. Bewusst ohne Intl, damit das Ergebnis auf dem
- * iPhone und in den Tests identisch ist.
+ * iPhone und in den Tests identisch ist. Zeiten gelten in der Zeitzone des Geräts.
  */
+
+export function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value)
+}
 
 /** Tausenderpunkte nach deutscher Schreibweise: 8000 → "8.000" */
 export function formatThousands(value: number): string {
@@ -10,36 +14,36 @@ export function formatThousands(value: number): string {
   return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
 }
 
-/** Uhrzeit in der Zeitzone des Geräts: "07:05" */
+/** "07:05" */
 export function formatClock(time: number): string {
   const date = new Date(time)
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
 }
 
-/** "heute 07:05", "gestern 23:10" oder "24.11. 07:05" relativ zu `now` */
-export function formatRelativeDay(time: number, now: number): string {
-  const day = startOfLocalDay(time)
-  const today = startOfLocalDay(now)
-  const clock = formatClock(time)
-  if (day === today) return `heute ${clock}`
-  if (today - day === 1) return `gestern ${clock}`
+/** "27.11." */
+export function formatDayMonth(time: number): string {
   const date = new Date(time)
-  return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}. ${clock}`
+  return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.`
 }
 
-/** Minuten als "45 min" oder "2 h 05 min" */
-export function formatMinutes(minutes: number): string {
-  const total = Math.round(minutes)
-  if (total < 60) return `${total} min`
-  return `${Math.floor(total / 60)} h ${pad2(total % 60)} min`
-}
-
-function startOfLocalDay(time: number): number {
+/** Fortlaufende Nummer des Kalendertags. Unabhängig von Sommerzeitwechseln. */
+export function localDayNumber(time: number): number {
   const date = new Date(time)
-  // Tagesnummer statt Millisekunden, damit Sommerzeitwechsel nicht stören
   return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000)
 }
 
-function pad2(value: number): string {
-  return value < 10 ? `0${value}` : String(value)
+/** "heute 07:05", "gestern 23:10" oder "24.11. 07:05" relativ zu `now` */
+export function formatRelativeDay(time: number, now: number): string {
+  const days = localDayNumber(now) - localDayNumber(time)
+  const clock = formatClock(time)
+  if (days === 0) return `heute ${clock}`
+  if (days === 1) return `gestern ${clock}`
+  return `${formatDayMonth(time)} ${clock}`
+}
+
+/** Zeigt von einem Schlüssel nur die letzten 4 Zeichen. */
+export function maskSecret(value: string | null): string {
+  if (value === null || value.trim() === "") return "fehlt"
+  const trimmed = value.trim()
+  return trimmed.length <= 4 ? "••••" : `••••${trimmed.slice(-4)}`
 }

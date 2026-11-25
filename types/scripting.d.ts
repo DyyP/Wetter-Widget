@@ -1,20 +1,18 @@
 /**
- * Minimale Typdefinitionen für die iOS-App „Scripting“ (Thom Fang).
+ * Typdefinitionen für die iOS-App „Scripting“ (Thom Fang), beschränkt auf
+ * die APIs, die dieses Projekt nutzt. Abgeleitet aus der Doku unter
+ * https://scriptingapp.github.io (Stand 11/2026) und auf dem iPhone geprüft.
  *
- * Die offiziellen Typen (`scripting.d.ts`, `global.d.ts`) liefert die App
- * selbst, sobald `npx scripting-cli start` mit einem iPhone verbunden ist.
- * Bis dahin beschreibt diese Datei nur die Teilmenge, die das Projekt nutzt,
- * abgeleitet aus der Doku unter https://scriptingapp.github.io (Stand 11/2026).
- *
- * Regel: Nur hier eintragen, was im Code wirklich verwendet wird, und jede
- * Signatur gegen die Doku prüfen. Lieber eng als großzügig typisieren.
+ * Die vollständigen offiziellen Typen schreibt `npx scripting-cli start`
+ * nach `dts/`, sobald ein Computer mit dem iPhone verbunden ist.
+ * Regel: nur eintragen, was der Code wirklich verwendet.
  */
 
 // ---------------------------------------------------------------------------
 // JSX
 // ---------------------------------------------------------------------------
 
-/** Ergebnis eines JSX-Ausdrucks. Die App rendert diesen Baum nativ mit SwiftUI. */
+/** Ergebnis eines JSX-Ausdrucks; die App rendert den Baum nativ mit SwiftUI */
 interface VirtualNode {
   readonly __virtualNode: true
 }
@@ -24,7 +22,6 @@ declare const Fragment: unique symbol
 
 declare namespace JSX {
   type Element = VirtualNode
-  // Keine HTML-Elemente: nur Komponenten aus "scripting" oder eigene Funktionen.
   interface IntrinsicElements {}
   interface ElementChildrenAttribute {
     children: {}
@@ -32,124 +29,69 @@ declare namespace JSX {
 }
 
 // ---------------------------------------------------------------------------
-// Modul "scripting": Ansichten und App-APIs
+// Modul "scripting"
 // ---------------------------------------------------------------------------
 
 declare module "scripting" {
   type Color = string
-  type DynamicColor = Color | { light: Color; dark: Color }
 
-  type FontWeight =
-    | "ultraLight"
-    | "thin"
-    | "light"
-    | "regular"
-    | "medium"
-    | "semibold"
-    | "bold"
-    | "heavy"
-    | "black"
+  type FontWeight = "ultraLight" | "thin" | "light" | "regular" | "medium" | "semibold" | "bold" | "heavy" | "black"
 
-  type FontDesign = "default" | "rounded" | "monospaced" | "serif"
-
-  /** Systemstil ("caption"), Punktgröße oder eigene Schrift. */
-  type Font = string | number | { name: string; size: number }
+  /** Systemstil ("caption") oder Punktgröße */
+  type Font = string | number
 
   type EdgeLength = number | true
 
   type Padding =
     | true
     | number
-    | {
-        horizontal?: EdgeLength
-        vertical?: EdgeLength
-        leading?: EdgeLength
-        trailing?: EdgeLength
-        top?: EdgeLength
-        bottom?: EdgeLength
-      }
+    | { horizontal?: EdgeLength; vertical?: EdgeLength; leading?: EdgeLength; trailing?: EdgeLength; top?: EdgeLength; bottom?: EdgeLength }
 
   interface Frame {
     width?: number
     height?: number
-    minWidth?: number
     maxWidth?: number | "infinity"
-    minHeight?: number
     maxHeight?: number | "infinity"
-    alignment?: "center" | "leading" | "trailing" | "top" | "bottom"
   }
 
   type Children = VirtualNode | string | number | boolean | null | undefined | Children[]
 
-  /** Modifier, die das Projekt verwendet. Weitere erst nach Doku-Abgleich ergänzen. */
   interface CommonViewProps {
     children?: Children
     padding?: Padding
     frame?: Frame
-    /** Farbe oder Farbe in Form, z. B. abgerundetes Rechteck hinter dem JETZT-Slot */
-    background?: DynamicColor | { style: DynamicColor; shape: { type: "rect"; cornerRadius: number } }
-    foregroundStyle?: DynamicColor
-    opacity?: number
+    /** Farbe, oder Farbe in einer Form (abgerundetes Rechteck) */
+    background?: Color | { style: Color; shape: { type: "rect"; cornerRadius: number } }
+    foregroundStyle?: Color
     font?: Font
     fontWeight?: FontWeight
-    fontDesign?: FontDesign
-    monospacedDigit?: boolean
     lineLimit?: number
     minScaleFactor?: number
-    layoutPriority?: number
     widgetURL?: string
-    /** Hintergrund, den das System im getönten/klaren Modus automatisch weglässt. */
-    widgetBackground?: DynamicColor
+    /** Hintergrund, den iOS im getönten oder klaren Modus automatisch weglässt */
+    widgetBackground?: Color
   }
 
   interface StackProps extends CommonViewProps {
     spacing?: number
   }
 
-  interface VStackProps extends StackProps {
-    alignment?: "leading" | "center" | "trailing"
-  }
-
-  interface HStackProps extends StackProps {
-    alignment?: "top" | "center" | "bottom" | "firstTextBaseline" | "lastTextBaseline"
-  }
-
-  interface SpacerProps {
-    minLength?: number
-  }
-
-  interface ImageRenderingProps {
-    /** true: Bild füllt den Rahmen (Seitenverhältnis über `frame` setzen) */
-    resizable?: boolean
-    interpolation?: "none" | "low" | "medium" | "high"
-    antialiased?: boolean
-    renderingMode?: "original" | "template"
-  }
-
-  interface SVGProps extends CommonViewProps, ImageRenderingProps {
-    filePath?: string
-    code?: string
-    url?: string
-  }
-
-  interface ImageProps extends CommonViewProps, ImageRenderingProps {
+  interface ImageProps extends CommonViewProps {
     /** Name eines SF Symbols */
     systemName?: string
     filePath?: string
-    scaleToFit?: boolean
+    /** Bild füllt den Rahmen; Seitenverhältnis über `frame` setzen */
+    resizable?: boolean
   }
 
-  interface ShapeProps extends CommonViewProps {
-    fill?: DynamicColor
-  }
-
-  function VStack(props: VStackProps): VirtualNode
-  function HStack(props: HStackProps): VirtualNode
-  function Spacer(props: SpacerProps): VirtualNode
+  function VStack(props: StackProps): VirtualNode
+  function HStack(props: StackProps): VirtualNode
+  function Spacer(props: { minLength?: number }): VirtualNode
   function Text(props: CommonViewProps): VirtualNode
-  function SVG(props: SVGProps): VirtualNode
   function Image(props: ImageProps): VirtualNode
-  function Circle(props: ShapeProps): VirtualNode
+  function Circle(props: CommonViewProps & { fill?: Color }): VirtualNode
+  /** Nur in der App verwenden: Im Widget sprengt das Umrechnen das Speicherlimit */
+  function SVG(props: CommonViewProps & { filePath: string; resizable?: boolean }): VirtualNode
 
   type WidgetFamily =
     | "systemSmall"
@@ -165,77 +107,55 @@ declare module "scripting" {
 
   class Widget {
     static readonly family: WidgetFamily
-    static readonly displaySize: { width: number; height: number }
-    static readonly parameter: string
+    /** Nach dem Aufruf läuft im Widget kein weiterer Code */
     static present(element: VirtualNode, reloadPolicy?: WidgetReloadPolicy): void
-    /** Vorschau in der App (nur index.tsx), rendert widget.tsx */
-    static preview(options?: { family?: WidgetFamily; parameters?: { options: Record<string, string>; default: string } }): Promise<void>
+    /** Nur in der App: rendert widget.tsx als Vorschau */
+    static preview(options?: { family?: WidgetFamily }): Promise<void>
     static reloadAll(): void
-    static reloadUserWidgets(): Promise<void> | void
   }
 
-  /** Zeichnet eine Ansicht in der App zu einem Bild (nicht im Widget) */
+  /** Nur in der App: zeichnet eine Ansicht zu einem Bild */
   class ImageRenderer {
     static toUIImage(element: VirtualNode, options?: { scale?: number; opaque?: boolean }): Promise<UIImage>
   }
 
   class Script {
-    static readonly name: string
-    static readonly directory: string
-    /** z. B. "index" (App), "widget", "intent" */
-    static readonly env: string
-    static readonly metadata: { name?: string; version?: string }
+    static readonly metadata: { version?: string } | undefined
     static exit(result?: unknown): void
-    static createImportScriptsURLScheme(urls: string[]): string
   }
 }
 
 // ---------------------------------------------------------------------------
-// Globale APIs (in Scripting ohne Import verfügbar)
+// Globale APIs (ohne Import verfügbar)
 // ---------------------------------------------------------------------------
 
-/** Timer laut Doku „Script Timers and Scheduling“ (Node-kompatibel) */
 declare function setTimeout(handler: () => void, milliseconds?: number): number
 declare function clearTimeout(id: number | undefined): void
 
-declare const console: {
-  log(...args: unknown[]): void
-  warn(...args: unknown[]): void
-  error(...args: unknown[]): void
+declare class Data {}
+
+declare class UIImage {
+  toPNGData(): Data | null
 }
 
 declare namespace Keychain {
-  type Accessibility =
-    | "passcode"
-    | "unlocked"
-    | "unlocked_this_device"
-    | "first_unlock"
-    | "first_unlock_this_device"
   interface Options {
-    accessibility?: Accessibility
+    accessibility?: "passcode" | "unlocked" | "unlocked_this_device" | "first_unlock" | "first_unlock_this_device"
     synchronizable?: boolean
   }
   function set(key: string, value: string, options?: Options): boolean
   function get(key: string, options?: Options): string | null
   function remove(key: string, options?: Options): boolean
-  function contains(key: string, options?: Options): boolean
 }
 
 declare namespace Dialog {
   function alert(options: { message: string; title?: string; buttonLabel?: string }): Promise<void>
-  function confirm(options: {
-    message: string
-    title?: string
-    cancelLabel?: string
-    confirmLabel?: string
-  }): Promise<boolean>
+  function confirm(options: { message: string; title?: string; cancelLabel?: string; confirmLabel?: string }): Promise<boolean>
   function prompt(options: {
     title: string
     message?: string
-    defaultValue?: string
-    obscureText?: boolean
-    selectAll?: boolean
     placeholder?: string
+    obscureText?: boolean
     cancelLabel?: string
     confirmLabel?: string
   }): Promise<string | null>
@@ -248,63 +168,24 @@ declare namespace Dialog {
 }
 
 declare namespace FileManager {
-  /** Für App und Widget gemeinsam lesbar, nicht in der Dateien-App sichtbar. */
+  /** Für App und Widget gemeinsam, nicht in der Dateien-App sichtbar */
   const appGroupDocumentsDirectory: string
-  const isiCloudEnabled: boolean
-  /** Wirft, wenn iCloud aus ist. Vorher `isiCloudEnabled` prüfen. */
-  const iCloudDocumentsDirectory: string
-  /** In der Dateien-App sichtbar, aber nicht vom Widget lesbar. */
-  const documentsDirectory: string
   function exists(path: string): Promise<boolean>
   function createDirectory(path: string, recursive?: boolean): Promise<void>
   function readAsString(path: string): Promise<string>
   function writeAsString(path: string, content: string): Promise<void>
   function writeAsData(path: string, data: Data): Promise<void>
-  function appendText(path: string, content: string): Promise<void>
-  function remove(path: string): Promise<void>
 }
 
 declare namespace Location {
-  type Accuracy =
-    | "best"
-    | "tenMeters"
-    | "hundredMeters"
-    | "kilometer"
-    | "threeKilometers"
-    | "bestForNavigation"
-    | "reduced"
-  interface LocationInfo {
-    latitude: number
-    longitude: number
-    timestamp: number
-  }
-  /** Ob dieses Widget Standort-Updates erhalten darf. */
+  /** Ob iOS diesem Widget Standortabfragen erlaubt */
   const isAuthorizedForWidgetUpdates: boolean
-  function setAccuracy(accuracy: Accuracy): Promise<void>
-  function requestCurrent(options?: { forceRequest?: boolean }): Promise<LocationInfo | null>
-}
-
-declare namespace Safari {
-  function openURL(url: string): Promise<boolean>
-}
-
-// --- fetch (Scripting-Variante des Web-Standards) ---------------------------
-
-declare class UIImage {
-  readonly width: number
-  readonly height: number
-  toPNGData(): Data | null
-}
-
-/** Binärdaten in Scripting */
-declare class Data {
-  readonly size: number
+  function setAccuracy(accuracy: "best" | "tenMeters" | "hundredMeters" | "kilometer" | "threeKilometers"): Promise<void>
+  /** Liefert einen gespeicherten Ort sofort, sonst eine neue Ortung */
+  function requestCurrent(): Promise<{ latitude: number; longitude: number; timestamp: number } | null>
 }
 
 declare class Headers {
-  get(name: string): string | null
-  has(name: string): boolean
-  forEach(callback: (value: string, name: string) => void): void
   entries(): [string, string][]
 }
 
@@ -312,24 +193,14 @@ declare class Response {
   readonly ok: boolean
   readonly status: number
   readonly headers: Headers
-  json(): Promise<unknown>
   text(): Promise<string>
-  /** Scripting-Erweiterung: Rumpf als Data (z. B. Bilder) */
-  data(): Promise<Data>
-}
-
-declare class AbortSignal {
-  static timeout(milliseconds: number): AbortSignal
 }
 
 interface RequestInit {
   method?: string
   headers?: Record<string, string>
-  body?: string
   /** Sekunden */
   timeout?: number
-  signal?: AbortSignal
-  debugLabel?: string
 }
 
 declare function fetch(url: string, init?: RequestInit): Promise<Response>

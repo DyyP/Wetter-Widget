@@ -106,7 +106,7 @@ export function buildModel(input: ModelInput): ModelResult {
 
   const warningAlert = relevantAlerts(input.alerts, now)[0]
   const warning = warningAlert === undefined ? null : { text: alertText(warningAlert, now), level: warningAlert.level }
-  const stale = input.fetchedAt !== null && now - input.fetchedAt > STALE_AFTER_MS
+  const stale = input.fetchedAt !== null && now - input.fetchedAt > STALE_AFTER_MS ? input.fetchedAt : null
 
   return {
     ok: true,
@@ -114,11 +114,16 @@ export function buildModel(input: ModelInput): ModelResult {
       slots: slots.slice(0, SLOT_COUNT),
       days: dayColumns(forecast, input.sunEvents, now),
       warning,
-      staleHint: stale && input.fetchedAt !== null ? `Stand ${formatRelativeDay(input.fetchedAt, now)}` : null,
+      staleHint: stale === null ? null : `Stand ${formatRelativeDay(stale, now)}`,
       tapUrl: meteoblueWeekUrl({ lat: forecast.latitude, lon: forecast.longitude }),
       nextRefresh: startOfNextHour(now),
     },
   }
+}
+
+/** Alle Icons, die ein Modell braucht */
+export function modelIconNames(model: WidgetModel): string[] {
+  return [...model.slots.map((slot) => slot.icon), ...model.days.map((day) => day.icon)]
 }
 
 function hourSlot(hour: HourlyPoint, isNow: boolean): HourSlot {
@@ -188,7 +193,7 @@ function dayColumns(forecast: Forecast, sunEvents: SunEvent[], now: number): Day
       max: roundTemperature(day.temperatureMax),
       min: roundTemperature(day.temperatureMin),
       rain: formatRain(day.precipitation, "mm"),
-      sunsetLevel: sunset?.quality === null || sunset?.quality === undefined ? null : qualityLevel(sunset.quality),
+      sunsetLevel: typeof sunset?.quality === "number" ? qualityLevel(sunset.quality) : null,
     }
   })
 }

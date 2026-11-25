@@ -1,7 +1,4 @@
-/**
- * Gespeicherte Daten und Abrufzustand. Alles liegt im App-Group-Ordner,
- * damit App und Widget dieselben Daten sehen.
- */
+/** Gespeicherte Daten, Abrufzustand und Ergebnis des letzten Widget-Durchlaufs. */
 
 import type { Alert } from "../core/dwd"
 import type { Coordinates } from "../core/geo"
@@ -14,7 +11,7 @@ export interface PlannerStore {
   meteoblue: MeteoblueState
   sunsethue: SourceState
   warnings: SourceState
-  /** Letzter bekannter Standort, falls die Ortung im Widget scheitert */
+  /** Letzter bekannter Ort, falls die Ortung scheitert */
   lastLocation: Coordinates | null
 }
 
@@ -24,15 +21,19 @@ export interface Cached<T> {
   value: T
 }
 
-const FILES = {
-  planner: `${sharedDirectory}/planner.json`,
-  forecast: `${sharedDirectory}/forecast.json`,
-  sunEvents: `${sharedDirectory}/sun-events.json`,
-  alerts: `${sharedDirectory}/alerts.json`,
-} as const
+export interface WidgetRun {
+  /** UTC in ms */
+  time: number
+  /** Was gezeichnet wurde, z. B. "Wetter" oder der angezeigte Hinweis */
+  result: string
+  /** Fehler einer Datenquelle in diesem Durchlauf */
+  errors: string[]
+}
+
+const file = (name: string) => `${sharedDirectory}/${name}.json`
 
 export async function loadPlanner(): Promise<PlannerStore> {
-  const stored = await readJson<Partial<PlannerStore>>(FILES.planner)
+  const stored = await readJson<Partial<PlannerStore>>(file("planner"))
   return {
     meteoblue: { ...EMPTY_METEOBLUE, ...stored?.meteoblue },
     sunsethue: { ...EMPTY_SOURCE, ...stored?.sunsethue },
@@ -40,14 +41,24 @@ export async function loadPlanner(): Promise<PlannerStore> {
     lastLocation: stored?.lastLocation ?? null,
   }
 }
+export const savePlanner = (store: PlannerStore) => writeJson(file("planner"), store)
 
-export const savePlanner = (store: PlannerStore) => writeJson(FILES.planner, store)
+/** Welche Daten-Caches vorhanden sind (ohne sie zu lesen) */
+export async function cachedSources(): Promise<{ forecast: boolean; sunEvents: boolean; alerts: boolean }> {
+  const [forecast, sunEvents, alerts] = await Promise.all(
+    ["forecast", "sun-events", "alerts"].map((name) => FileManager.exists(file(name))),
+  )
+  return { forecast: forecast === true, sunEvents: sunEvents === true, alerts: alerts === true }
+}
 
-export const loadForecast = () => readJson<Cached<Forecast>>(FILES.forecast)
-export const saveForecast = (value: Cached<Forecast>) => writeJson(FILES.forecast, value)
+export const loadForecast = () => readJson<Cached<Forecast>>(file("forecast"))
+export const saveForecast = (value: Cached<Forecast>) => writeJson(file("forecast"), value)
 
-export const loadSunEvents = () => readJson<Cached<SunEvent[]>>(FILES.sunEvents)
-export const saveSunEvents = (value: Cached<SunEvent[]>) => writeJson(FILES.sunEvents, value)
+export const loadSunEvents = () => readJson<Cached<SunEvent[]>>(file("sun-events"))
+export const saveSunEvents = (value: Cached<SunEvent[]>) => writeJson(file("sun-events"), value)
 
-export const loadAlerts = () => readJson<Cached<Alert[]>>(FILES.alerts)
-export const saveAlerts = (value: Cached<Alert[]>) => writeJson(FILES.alerts, value)
+export const loadAlerts = () => readJson<Cached<Alert[]>>(file("alerts"))
+export const saveAlerts = (value: Cached<Alert[]>) => writeJson(file("alerts"), value)
+
+export const loadWidgetRun = () => readJson<WidgetRun>(file("widget-run"))
+export const saveWidgetRun = (run: WidgetRun) => writeJson(file("widget-run"), run)

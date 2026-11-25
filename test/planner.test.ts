@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest"
 import {
-  DEFAULT_METEOBLUE_PLAN,
   EMPTY_METEOBLUE,
   EMPTY_SOURCE,
+  METEOBLUE_PLAN,
   decideMeteoblue,
   decideSunsethue,
   decideWarnings,
   lastSlotStart,
-  pruneCalls,
+  meteoblueSuccess,
+  sourceFailure,
+  type Context,
   type MeteoblueState,
 } from "../Wetter/core/planner"
 
@@ -16,9 +18,10 @@ const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, ho
 const HOME = { lat: 49.0, lon: 8.4 }
 const HOUR = 3_600_000
 
-function state(partial: Partial<MeteoblueState>): MeteoblueState {
-  return { ...EMPTY_METEOBLUE, location: HOME, ...partial }
-}
+const ctx = (now: number, extra: Partial<Context> = {}): Context => ({ now, here: HOME, hasData: true, manual: false, ...extra })
+const state = (partial: Partial<MeteoblueState>): MeteoblueState => ({ ...EMPTY_METEOBLUE, location: HOME, ...partial })
+/** Zustand nach einem erfolgreichen Abruf zu `time` */
+const fetchedAt = (time: number, calls: number[] = [time]) => state({ lastSuccess: time, billedCalls: calls })
 
 describe("lastSlotStart", () => {
   it("findet das letzte Zeitfenster 06/12/17 Uhr", () => {
@@ -30,69 +33,65 @@ describe("lastSlotStart", () => {
 })
 
 describe("decideMeteoblue", () => {
-  it("ruft ohne Daten sofort ab", () => {
-    expect(decideMeteoblue(EMPTY_METEOBLUE, HOME, at(25, 3))).toEqual({ fetch: true, reason: "no-data" })
+  it("ruft ohne Daten sofort ab, auch wenn nur der Cache fehlt", () => {
+    expect(decideMeteoblue(EMPTY_METEOBLUE, ctx(at(25, 3)))).toEqual({ fetch: true, reason: "no-data" })
+    expect(decideMeteoblue(fetchedAt(at(25, 6, 5)), ctx(at(25, 7), { hasData: false }))).toEqual({ fetch: true, reason: "no-data" })
   })
 
   it("ruft einmal pro Zeitfenster ab", () => {
-    const fresh = state({ lastSuccess: at(25, 6, 5), billedCalls: [at(25, 6, 5)] })
-    expect(decideMeteoblue(fresh, HOME, at(25, 11, 50))).toEqual({ fetch: false, reason: "up-to-date" })
-    expect(decideMeteoblue(fresh, HOME, at(25, 12, 1))).toEqual({ fetch: true, reason: "slot" })
+    const fresh = fetchedAt(at(25, 6, 5))
+    expect(decideMeteoblue(fresh, ctx(at(25, 11, 50)))).toEqual({ fetch: false, reason: "up-to-date" })
+    expect(decideMeteoblue(fresh, ctx(at(25, 12, 1)))).toEqual({ fetch: true, reason: "slot" })
   })
 
   it("holt ein verpasstes Fenster nach, aber nur einmal", () => {
-    const old = state({ lastSuccess: at(24, 17, 10), billedCalls: [at(24, 17, 10)] })
-    expect(decideMeteoblue(old, HOME, at(25, 14))).toEqual({ fetch: true, reason: "slot" })
-    const caughtUp = state({ lastSuccess: at(25, 14), billedCalls: [at(24, 17, 10), at(25, 14)] })
-    expect(decideMeteoblue(caughtUp, HOME, at(25, 16, 59))).toEqual({ fetch: false, reason: "up-to-date" })
+    expect(decideMeteoblue(fetchedAt(at(24, 17, 10)), ctx(at(25, 14)))).toEqual({ fetch: true, reason: "slot" })
+    const caughtUp = fetchedAt(at(25, 14), [at(24, 17, 10), at(25, 14)])
+    expect(decideMeteoblue(caughtUp, ctx(at(25, 16, 59)))).toEqual({ fetch: false, reason: "up-to-date" })
   })
 
   it("überspringt ein Fenster direkt nach einem anderen Abruf", () => {
-    const justFetched = state({ lastSuccess: at(25, 11, 40), billedCalls: [at(25, 11, 40)] })
-    expect(decideMeteoblue(justFetched, HOME, at(25, 12, 5)).fetch).toBe(false)
+    expect(decideMeteoblue(fetchedAt(at(25, 11, 40)), ctx(at(25, 12, 5))).fetch).toBe(false)
   })
 
   it("ruft bei Ortswechsel über 5 km ab", () => {
-    const fresh = state({ lastSuccess: at(25, 12, 5), billedCalls: [at(25, 12, 5)] })
-    expect(decideMeteoblue(fresh, { lat: 49.02, lon: 8.4 }, at(25, 13)).fetch).toBe(false)
-    expect(decideMeteoblue(fresh, { lat: 49.1, lon: 8.4 }, at(25, 13))).toEqual({ fetch: true, reason: "moved" })
+    const fresh = fetchedAt(at(25, 12, 5))
+    expect(decideMeteoblue(fresh, ctx(at(25, 13), { here: { lat: 49.02, lon: 8.4 } })).fetch).toBe(false)
+    expect(decideMeteoblue(fresh, ctx(at(25, 13), { here: { lat: 49.1, lon: 8.4 } }))).toEqual({ fetch: true, reason: "moved" })
   })
 
   it("hält das 7-Tage-Budget ein", () => {
-    const calls = Array.from({ length: DEFAULT_METEOBLUE_PLAN.weeklyBudget }, (_, i) => at(25, 6) - (i + 1) * 6 * HOUR)
+    const calls = Array.from({ length: METEOBLUE_PLAN.weeklyBudget }, (_, i) => at(25, 6) - (i + 1) * 6 * HOUR)
     const exhausted = state({ lastSuccess: at(24, 17), billedCalls: calls })
-    expect(decideMeteoblue(exhausted, HOME, at(25, 7))).toEqual({ fetch: false, reason: "budget" })
-    expect(decideMeteoblue(exhausted, { lat: 50, lon: 8.4 }, at(25, 7))).toEqual({ fetch: false, reason: "budget" })
+    expect(decideMeteoblue(exhausted, ctx(at(25, 7)))).toEqual({ fetch: false, reason: "budget" })
+    expect(decideMeteoblue(exhausted, ctx(at(25, 7), { here: { lat: 50, lon: 8.4 } }))).toEqual({ fetch: false, reason: "budget" })
   })
 
   it("wartet nach einem Fehlversuch", () => {
-    const failed = state({ lastSuccess: at(25, 6), lastAttempt: at(25, 12, 1), lastAttemptOk: false, billedCalls: [at(25, 6)] })
-    expect(decideMeteoblue(failed, HOME, at(25, 12, 10))).toEqual({ fetch: false, reason: "retry-wait" })
-    expect(decideMeteoblue(failed, HOME, at(25, 12, 30))).toEqual({ fetch: true, reason: "slot" })
+    const failed = sourceFailure(fetchedAt(at(25, 6)), at(25, 12, 1))
+    expect(decideMeteoblue(failed, ctx(at(25, 12, 10)))).toEqual({ fetch: false, reason: "retry-wait" })
+    expect(decideMeteoblue(failed, ctx(at(25, 12, 30)))).toEqual({ fetch: true, reason: "slot" })
   })
 
   it("erlaubt Handabrufe bis zur Tagesgrenze", () => {
-    const today = Array.from({ length: 5 }, (_, i) => at(25, 6 + i))
-    expect(decideMeteoblue(state({ lastSuccess: at(25, 10), billedCalls: today }), HOME, at(25, 11), undefined, true)).toEqual({
-      fetch: true,
-      reason: "manual",
-    })
-    const full = [...today, at(25, 11)]
-    expect(decideMeteoblue(state({ lastSuccess: at(25, 11), billedCalls: full }), HOME, at(25, 11, 30), undefined, true)).toEqual({
+    const five = Array.from({ length: 5 }, (_, i) => at(25, 6 + i))
+    expect(decideMeteoblue(fetchedAt(at(25, 10), five), ctx(at(25, 11), { manual: true }))).toEqual({ fetch: true, reason: "manual" })
+    const six = [...five, at(25, 11)]
+    expect(decideMeteoblue(fetchedAt(at(25, 11), six), ctx(at(25, 11, 30), { manual: true }))).toEqual({
       fetch: false,
       reason: "daily-max",
     })
   })
 
-  it("das Budget passt ins Free-Kontingent von 10 Mio. Credits", () => {
-    const creditsPerYear = (DEFAULT_METEOBLUE_PLAN.weeklyBudget / 7) * 365 * 8000
-    expect(creditsPerYear).toBeLessThan(10_000_000)
+  it("passt ins Free-Kontingent von 10 Mio. Credits pro Jahr", () => {
+    expect((METEOBLUE_PLAN.weeklyBudget / 7) * 365 * 8000).toBeLessThan(10_000_000)
   })
 })
 
-describe("pruneCalls", () => {
-  it("behält nur die letzten 8 Tage", () => {
-    expect(pruneCalls([at(10, 12), at(20, 12), at(25, 12)], at(25, 13))).toEqual([at(20, 12), at(25, 12)])
+describe("meteoblueSuccess", () => {
+  it("merkt sich Ort und Abruf und vergisst Abrufe älter als 8 Tage", () => {
+    const next = meteoblueSuccess(state({ billedCalls: [at(10, 12), at(20, 12)] }), HOME, at(25, 13))
+    expect(next).toEqual({ lastSuccess: at(25, 13), lastAttempt: at(25, 13), lastAttemptOk: true, location: HOME, billedCalls: [at(20, 12), at(25, 13)] })
   })
 })
 
@@ -102,27 +101,29 @@ describe("decideSunsethue", () => {
   it("ruft nach jedem Sunsethue-Update ab", () => {
     // 10:30 UTC = 11:30 Berlin, plus 20 Minuten Puffer
     const s = { ...base, lastSuccess: at(25, 8) }
-    expect(decideSunsethue(s, HOME, at(25, 11, 40))).toBe(false)
-    expect(decideSunsethue(s, HOME, at(25, 11, 55))).toBe(true)
+    expect(decideSunsethue(s, ctx(at(25, 11, 40)))).toBe(false)
+    expect(decideSunsethue(s, ctx(at(25, 11, 55)))).toBe(true)
   })
 
-  it("ruft an einem neuen Tag und bei Ortswechsel ab", () => {
-    expect(decideSunsethue({ ...base, lastSuccess: at(24, 23, 50) }, HOME, at(25, 0, 10))).toBe(true)
-    expect(decideSunsethue({ ...base, lastSuccess: at(25, 12) }, { lat: 49.2, lon: 8.4 }, at(25, 12, 30))).toBe(true)
+  it("ruft ohne Daten, an einem neuen Tag und bei Ortswechsel ab", () => {
+    expect(decideSunsethue({ ...base, lastSuccess: at(25, 12) }, ctx(at(25, 12, 5), { hasData: false }))).toBe(true)
+    expect(decideSunsethue({ ...base, lastSuccess: at(24, 23, 50) }, ctx(at(25, 0, 10)))).toBe(true)
+    expect(decideSunsethue({ ...base, lastSuccess: at(25, 12) }, ctx(at(25, 12, 30), { here: { lat: 49.2, lon: 8.4 } }))).toBe(true)
   })
 
-  it("wartet 30 Minuten nach einem Fehler", () => {
-    const failed = { ...base, lastSuccess: null, lastAttempt: at(25, 12), lastAttemptOk: false }
-    expect(decideSunsethue(failed, HOME, at(25, 12, 20))).toBe(false)
-    expect(decideSunsethue(failed, HOME, at(25, 12, 31))).toBe(true)
+  it("wartet 30 Minuten nach einem Fehler, außer von Hand", () => {
+    const failed = sourceFailure(base, at(25, 12))
+    expect(decideSunsethue(failed, ctx(at(25, 12, 20)))).toBe(false)
+    expect(decideSunsethue(failed, ctx(at(25, 12, 20), { manual: true }))).toBe(true)
+    expect(decideSunsethue(failed, ctx(at(25, 12, 31)))).toBe(true)
   })
 })
 
 describe("decideWarnings", () => {
   it("prüft alle 30 Minuten", () => {
     const s = { ...EMPTY_SOURCE, location: HOME, lastSuccess: at(25, 12) }
-    expect(decideWarnings(s, HOME, at(25, 12, 29))).toBe(false)
-    expect(decideWarnings(s, HOME, at(25, 12, 30))).toBe(true)
-    expect(decideWarnings({ ...EMPTY_SOURCE }, HOME, at(25, 12))).toBe(true)
+    expect(decideWarnings(s, ctx(at(25, 12, 29)))).toBe(false)
+    expect(decideWarnings(s, ctx(at(25, 12, 30)))).toBe(true)
+    expect(decideWarnings(EMPTY_SOURCE, ctx(at(25, 12)))).toBe(true)
   })
 })

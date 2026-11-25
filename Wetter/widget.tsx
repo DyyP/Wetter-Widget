@@ -1,54 +1,35 @@
 /**
- * Widget-Einstieg: Daten nach Plan auffrischen, aus dem Cache das Modell bauen,
- * fehlende Icons laden und zeichnen. Mit dem Widget-Parameter „diagnose“
- * zeigt das Widget stattdessen die Diagnose aus Meilenstein 1.
+ * Widget-Einstieg: Daten nach Plan auffrischen, aus dem Cache das Modell
+ * bauen und zeichnen. Das Ergebnis jedes Durchlaufs landet unter „Status“
+ * in der App.
  */
 
-import { Script, Widget } from "scripting"
-import type { ProbeSummary } from "./core/diagnostics"
-import { probeLine, summarizeRenders } from "./core/diagnostics"
-import { formatClock, formatMinutes } from "./core/format"
-import { buildModel, type WidgetModel } from "./core/model"
-import { refresh, withTimeout } from "./data/refresh"
-import { loadAlerts, loadForecast, loadSunEvents } from "./platform/cache"
-import { widgetIconPaths } from "./platform/icons"
-import { widgetLocationAllowed } from "./platform/location"
-import { recordRender } from "./platform/renderlog"
+import { Widget } from "scripting"
+import { buildModel, modelIconNames } from "./core/model"
+import { refresh, reportErrors } from "./data/refresh"
+import { loadAlerts, loadForecast, loadSunEvents, saveWidgetRun } from "./platform/cache"
+import { renderedIcons } from "./platform/icons"
 import { readSecret } from "./platform/secrets"
-import { readJson, sharedFiles, writeJson } from "./platform/storage"
-import { DiagnosticsWidget } from "./ui/DiagnosticsWidget"
 import { MessageWidget, WeatherWidget } from "./ui/WeatherWidget"
 
-/** Protokoll des letzten Widget-Durchlaufs, sichtbar unter „Status“ in der App */
-const trace: { time: number; step: string }[] = []
-function step(name: string): Promise<void> {
-  trace.push({ time: Date.now(), step: name })
-  return writeJson(sharedFiles.widgetTrace, { steps: trace }).catch(() => undefined)
-}
-
-/** iOS gibt Widgets nur wenige Sekunden. Abrufe bekommen höchstens so lange. */
-const REFRESH_BUDGET_MS = 8000
-const ICON_BUDGET_MS = 4000
+/** Nach einem Hinweis statt Wetter: in 15 Minuten erneut versuchen */
+const RETRY_MS = 15 * 60_000
+/** Kurz nach der vollen Stunde neu zeichnen, damit „JETZT“ weiterrückt */
+const AFTER_HOUR_MS = 60_000
 
 async function main(): Promise<void> {
   const now = Date.now()
-  await step("start")
-  const size = Widget.displaySize
-  // Protokoll zuerst: Nach Widget.present() läuft kein Code mehr.
-  const renders = await recordRender({ time: now, family: Widget.family, width: size.width, height: size.height })
-
-  if (Widget.parameter.trim().toLowerCase() === "diagnose") {
-    await presentDiagnostics(now, renders)
+  if (Widget.family !== "systemMedium") {
+    await showMessage(now, "Das Wetter-Widget gibt es nur in mittlerer Größe.", [])
     return
   }
 
-  await step("refresh")
+  let errors: string[]
   try {
-    const report = await withTimeout(refresh(now, { inWidget: true }), REFRESH_BUDGET_MS)
-    await step(report === null ? "refresh: Zeitlimit" : "refresh: fertig")
+    errors = reportErrors(await refresh(now, { manual: false, inWidget: true }))
   } catch (error) {
-    // Abruffehler sind kein Grund, nichts zu zeigen: Der Cache reicht.
-    await step(`refresh: Fehler ${error instanceof Error ? error.message : String(error)}`)
+    // Ohne frische Daten weiter mit dem Cache
+    errors = [errorText(error)]
   }
 
   const [forecast, sunEvents, alerts] = await Promise.all([loadForecast(), loadSunEvents(), loadAlerts()])
@@ -59,64 +40,42 @@ async function main(): Promise<void> {
     sunEvents: sunEvents?.value ?? [],
     alerts: alerts?.value ?? [],
   })
-
-  await step(`modell: ${result.ok ? "ok" : result.reason}`)
   if (!result.ok) {
-    const keyMissing = readSecret("meteoblue") === null
-    Widget.present(
-      <MessageWidget
-        title="Wetter-Widget"
-        message={
-          keyMissing
-            ? "Noch kein meteoblue-Key. Öffne das Script „Wetter“ in Scripting und richte die Keys ein."
-            : result.reason === "no-data"
-              ? "Noch keine Wetterdaten. Prüfe Netz und Standortfreigabe, das Widget versucht es gleich erneut."
-              : "Die gespeicherten Daten sind veraltet. Prüfe die Internetverbindung."
-        }
-      />,
-      { policy: "after", date: new Date(now + 15 * 60_000) },
-    )
+    const text =
+      readSecret("meteoblue") === null
+        ? "Noch kein meteoblue-Key. Öffne das Script „Wetter“ in Scripting und richte die Keys ein."
+        : result.reason === "no-data"
+          ? "Noch keine Wetterdaten. Öffne das Script „Wetter“ und tippe auf „Jetzt aktualisieren“."
+          : "Die gespeicherten Daten sind veraltet. Prüfe die Internetverbindung."
+    await showMessage(now, text, errors)
     return
   }
 
-  await step("icons")
-  const paths = (await withTimeout(widgetIconPaths(iconNames(result.model)), ICON_BUDGET_MS)) ?? new Map<string, string>()
-  await step(`zeichnen (${paths.size} Icons)`)
-  Widget.present(<WeatherWidget model={result.model} icons={{ paths }} />, {
+  const icons = await renderedIcons(modelIconNames(result.model))
+  if (icons.size === 0) {
+    await showMessage(now, "Die Wetter-Icons fehlen. Öffne das Script „Wetter“ und tippe auf „Jetzt aktualisieren“.", errors)
+    return
+  }
+
+  await saveWidgetRun({ time: now, result: "Wetter", errors })
+  Widget.present(<WeatherWidget model={result.model} icons={icons} />, {
     policy: "after",
-    // Kurz nach der vollen Stunde, damit „JETZT“ weiterrückt
-    date: new Date(result.model.nextRefresh + 60_000),
+    date: new Date(result.model.nextRefresh + AFTER_HOUR_MS),
   })
 }
 
-function iconNames(model: WidgetModel): string[] {
-  return [...model.slots.map((s) => s.icon), ...model.days.map((d) => d.icon)]
+async function showMessage(now: number, text: string, errors: string[]): Promise<void> {
+  await saveWidgetRun({ time: now, result: text, errors })
+  Widget.present(<MessageWidget title="Wetter-Widget" message={text} />, { policy: "after", date: new Date(now + RETRY_MS) })
 }
 
-async function presentDiagnostics(now: number, renders: Awaited<ReturnType<typeof recordRender>>): Promise<void> {
-  const stats = summarizeRenders(renders, now)
-  const probe = await readJson<ProbeSummary>(sharedFiles.lastProbe)
-  const refreshParts = [`Gezeichnet ${formatClock(now)}`, `${stats.last24h}× in 24 h`]
-  if (stats.medianGapMinutes !== null) refreshParts.push(`typisch alle ${formatMinutes(stats.medianGapMinutes)}`)
-  const size = Widget.displaySize
-  Widget.present(
-    <DiagnosticsWidget
-      data={{
-        version: Script.metadata?.version ?? "?",
-        meteoblueKey: readSecret("meteoblue") !== null,
-        sunsethueKey: readSecret("sunsethue") !== null,
-        locationAllowed: widgetLocationAllowed(),
-        probeLine: probeLine(probe, now),
-        sizeLine: `${Widget.family} · ${Math.round(size.width)}×${Math.round(size.height)} pt`,
-        refreshLine: refreshParts.join(" · "),
-      }}
-    />,
-    { policy: "after", date: new Date(now + 15 * 60_000) },
-  )
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 main().catch((error: unknown) => {
-  Widget.present(
-    <MessageWidget title="Wetter-Widget: Fehler" message={error instanceof Error ? error.message : String(error)} />,
-  )
+  Widget.present(<MessageWidget title="Wetter-Widget: Fehler" message={errorText(error)} />, {
+    policy: "after",
+    date: new Date(Date.now() + RETRY_MS),
+  })
 })

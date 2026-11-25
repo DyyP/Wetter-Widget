@@ -3,6 +3,4 @@ coverage/
 # scripting-cli: lokale Typen und Konfiguration vom iPhone
 dts/
 scripting.config.*
-# Rohantworten mit eventuell persönlichen Koordinaten nie einchecken
-*.probe.json
 .DS_Store

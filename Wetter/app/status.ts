@@ -1,18 +1,13 @@
-/** Statusübersicht im App-Menü: Keys, Abrufe, Budget, Widget-Aktualisierungen. */
+/** Status in der App: Keys, Abrufe, Budget und der letzte Widget-Durchlauf. */
 
-import { maskSecret, summarizeRenders } from "../core/diagnostics"
-import { formatMinutes, formatRelativeDay } from "../core/format"
-import { DEFAULT_METEOBLUE_PLAN, type SourceState } from "../core/planner"
-import { loadPlanner } from "../platform/cache"
-import { readRenders } from "../platform/renderlog"
+import { formatRelativeDay, maskSecret } from "../core/format"
+import { METEOBLUE_PLAN, type SourceState } from "../core/planner"
+import { loadPlanner, loadWidgetRun } from "../platform/cache"
 import { readSecret } from "../platform/secrets"
-import { readJson, sharedFiles } from "../platform/storage"
-import { formatClock } from "../core/format"
 
 export async function showStatus(): Promise<void> {
   const now = Date.now()
-  const store = await loadPlanner()
-  const renders = summarizeRenders(await readRenders(), now)
+  const [store, run] = await Promise.all([loadPlanner(), loadWidgetRun()])
   const weekCalls = store.meteoblue.billedCalls.filter((t) => t > now - 7 * 86_400_000).length
 
   const lines = [
@@ -20,29 +15,18 @@ export async function showStatus(): Promise<void> {
     `Sunsethue-Key: ${maskSecret(readSecret("sunsethue"))}`,
     "",
     `meteoblue: ${sourceLine(store.meteoblue, now)}`,
-    `Abrufe in 7 Tagen: ${weekCalls} von ${DEFAULT_METEOBLUE_PLAN.weeklyBudget}`,
+    `Abrufe in 7 Tagen: ${weekCalls} von ${METEOBLUE_PLAN.weeklyBudget}`,
     `Sunsethue: ${sourceLine(store.sunsethue, now)}`,
     `DWD-Warnungen: ${sourceLine(store.warnings, now)}`,
     "",
+    run === null ? "Widget: noch kein Durchlauf" : `Widget ${formatRelativeDay(run.time, now)}: ${run.result}`,
+    ...(run?.errors ?? []),
   ]
-  if (renders.last === null) lines.push("Widget: noch nie gezeichnet")
-  else {
-    lines.push(`Widget zuletzt ${formatRelativeDay(renders.last.time, now)} (${renders.last.width}×${renders.last.height} pt)`)
-    lines.push(`In 24 h ${renders.last24h}× neu gezeichnet`)
-    if (renders.medianGapMinutes !== null && renders.maxGapMinutes !== null) {
-      lines.push(`Abstand typisch ${formatMinutes(renders.medianGapMinutes)}, längste Pause ${formatMinutes(renders.maxGapMinutes)}`)
-    }
-  }
-  const trace = await readJson<{ steps: { time: number; step: string }[] }>(sharedFiles.widgetTrace)
-  if (trace !== null && trace.steps.length > 0) {
-    lines.push("", "Letzter Widget-Durchlauf:")
-    for (const s of trace.steps) lines.push(`${formatClock(s.time)} ${s.step}`)
-  }
   await Dialog.alert({ title: "Status", message: lines.join("\n") })
 }
 
 function sourceLine(state: SourceState, now: number): string {
   if (state.lastSuccess === null) return state.lastAttemptOk === false ? "bisher nur Fehlversuche" : "noch nie abgerufen"
-  const failedSince = state.lastAttemptOk === false && state.lastAttempt !== null
-  return `zuletzt ${formatRelativeDay(state.lastSuccess, now)}${failedSince ? ", letzter Versuch fehlgeschlagen" : ""}`
+  const failed = state.lastAttemptOk === false ? ", letzter Versuch fehlgeschlagen" : ""
+  return `zuletzt ${formatRelativeDay(state.lastSuccess, now)}${failed}`
 }

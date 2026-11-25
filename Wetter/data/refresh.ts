@@ -1,138 +1,113 @@
 /**
- * Datenbeschaffung für Widget und App: Standort bestimmen, mit dem Planer
- * entscheiden, was abgerufen wird, abrufen und speichern. Fehler einer
- * Quelle stoppen die anderen nicht; das Widget zeigt dann den letzten Stand.
+ * Datenbeschaffung für Widget und App: Ort bestimmen, mit dem Planer
+ * entscheiden, was abgerufen wird, abrufen und speichern. Die Quellen laufen
+ * parallel; ein Fehler einer Quelle stoppt die anderen nicht, das Widget
+ * zeigt dann deren letzten Stand.
  */
 
 import { addDays, localDateString, type Coordinates } from "../core/geo"
-import { roundCoordinate } from "../core/meteoblue"
+import { redactApiKey } from "../core/meteoblue"
 import {
-  DEFAULT_METEOBLUE_PLAN,
   decideMeteoblue,
   decideSunsethue,
   decideWarnings,
-  pruneCalls,
+  meteoblueSuccess,
+  sourceFailure,
+  sourceSuccess,
+  type Context,
   type MeteoblueDecision,
-  type SourceState,
 } from "../core/planner"
 import type { SunEventQuery } from "../core/sunsethue"
-import { loadPlanner, saveAlerts, saveForecast, savePlanner, saveSunEvents } from "../platform/cache"
+import { cachedSources, loadPlanner, saveAlerts, saveForecast, savePlanner, saveSunEvents } from "../platform/cache"
 import { currentCoordinates, widgetLocationAllowed } from "../platform/location"
 import { readSecret } from "../platform/secrets"
 import { fetchAlerts, fetchForecast, fetchSunEvents } from "../platform/sources"
 
-export type SourceOutcome = "skipped" | "ok" | "failed" | "unavailable"
+export type Outcome = "ok" | "skipped" | "failed" | "no-key"
 
-export interface RefreshReport {
-  location: Coordinates | null
-  /** true, wenn der Standort aus dem letzten bekannten Wert stammt */
-  locationFromCache: boolean
-  meteoblue: { decision: MeteoblueDecision | null; outcome: SourceOutcome; credits: number | null; error: string | null }
-  sunsethue: { outcome: SourceOutcome; error: string | null }
-  warnings: { outcome: SourceOutcome; error: string | null }
+export interface SourceReport {
+  outcome: Outcome
+  error: string | null
 }
 
-/** Standortabfrage im Widget darf nicht ewig dauern. */
-const LOCATION_TIMEOUT_MS = 6000
+export interface RefreshReport {
+  /** null: kein Ort bekannt, nichts abgerufen */
+  location: Coordinates | null
+  /** true: Ortung gescheitert, letzter bekannter Ort verwendet */
+  locationFromCache: boolean
+  meteoblue: SourceReport & { decision: MeteoblueDecision | null; credits: number | null }
+  sunsethue: SourceReport
+  warnings: SourceReport
+}
 
-export async function refresh(now: number, options: { manual?: boolean; inWidget?: boolean } = {}): Promise<RefreshReport> {
-  const manual = options.manual ?? false
-  const store = await loadPlanner()
+/** Im Widget hat iOS nur wenige Sekunden Geduld, in der App darf es länger dauern. */
+const LIMITS = {
+  widget: { locationMs: 3000, fetchSeconds: 8 },
+  app: { locationMs: 10_000, fetchSeconds: 20 },
+} as const
 
-  // Im Widget nur orten, wenn iOS es erlaubt, und nur kurz warten.
-  const mayLocate = !options.inWidget || widgetLocationAllowed() === true
-  const fresh = mayLocate ? await withTimeout(currentCoordinates(), options.inWidget ? 3000 : LOCATION_TIMEOUT_MS) : null
-  const here = fresh === null ? store.lastLocation : { lat: roundCoordinate(fresh.lat), lon: roundCoordinate(fresh.lon) }
-  if (fresh !== null && here !== null) store.lastLocation = here
+export async function refresh(now: number, mode: { manual: boolean; inWidget: boolean }): Promise<RefreshReport> {
+  const limits = mode.inWidget ? LIMITS.widget : LIMITS.app
+  const [store, cached] = await Promise.all([loadPlanner(), cachedSources()])
+
+  const located = mode.inWidget && !widgetLocationAllowed() ? null : await currentCoordinates(limits.locationMs)
+  if (located !== null) store.lastLocation = located
+  const here = located ?? store.lastLocation
 
   const report: RefreshReport = {
     location: here,
-    locationFromCache: fresh === null && here !== null,
-    meteoblue: { decision: null, outcome: "skipped", credits: null, error: null },
+    locationFromCache: located === null && here !== null,
+    meteoblue: { outcome: "skipped", error: null, decision: null, credits: null },
     sunsethue: { outcome: "skipped", error: null },
     warnings: { outcome: "skipped", error: null },
   }
-  if (here === null) {
-    report.meteoblue.outcome = report.sunsethue.outcome = report.warnings.outcome = "unavailable"
-    return report
-  }
+  if (here === null) return report
 
-  const meteoblueKey = readSecret("meteoblue")
-  const sunsethueKey = readSecret("sunsethue")
+  const context = (hasData: boolean): Context => ({ now, here, hasData, manual: mode.manual })
   const tasks: Promise<void>[] = []
 
-  // meteoblue nach Plan (06/12/17 Uhr, Ortswechsel, Budget)
-  if (meteoblueKey === null) report.meteoblue.outcome = "unavailable"
+  const meteoblueKey = readSecret("meteoblue")
+  if (meteoblueKey === null) report.meteoblue.outcome = "no-key"
   else {
-    const decision = decideMeteoblue(store.meteoblue, here, now, DEFAULT_METEOBLUE_PLAN, manual)
+    const decision = decideMeteoblue(store.meteoblue, context(cached.forecast))
     report.meteoblue.decision = decision
     if (decision.fetch) {
       tasks.push(
-        fetchForecast(meteoblueKey, here).then(
-          async ({ forecast, credits }) => {
-            await saveForecast({ fetchedAt: now, value: forecast })
-            store.meteoblue = {
-              lastSuccess: now,
-              lastAttempt: now,
-              lastAttemptOk: true,
-              location: here,
-              billedCalls: pruneCalls([...store.meteoblue.billedCalls, now], now),
-            }
-            report.meteoblue.outcome = "ok"
-            report.meteoblue.credits = credits
-          },
-          (error: unknown) => {
-            store.meteoblue = { ...store.meteoblue, lastAttempt: now, lastAttemptOk: false }
-            report.meteoblue.outcome = "failed"
-            report.meteoblue.error = message(error)
-          },
-        ),
+        run(report.meteoblue, async () => {
+          const { forecast, credits } = await fetchForecast(meteoblueKey, here, limits.fetchSeconds)
+          await saveForecast({ fetchedAt: now, value: forecast })
+          store.meteoblue = meteoblueSuccess(store.meteoblue, here, now)
+          report.meteoblue.credits = credits
+        }).catch(() => {
+          store.meteoblue = sourceFailure(store.meteoblue, now)
+        }),
       )
     }
   }
 
-  // Sunsethue: heute und morgen Auf- und Untergang, übermorgen Untergang
-  if (sunsethueKey === null) report.sunsethue.outcome = "unavailable"
-  else if (manual || decideSunsethue(store.sunsethue, here, now)) {
-    const today = localDateString(now)
-    const queries: SunEventQuery[] = [
-      { ...here, date: today, type: "sunrise" },
-      { ...here, date: today, type: "sunset" },
-      { ...here, date: addDays(today, 1), type: "sunrise" },
-      { ...here, date: addDays(today, 1), type: "sunset" },
-      { ...here, date: addDays(today, 2), type: "sunset" },
-    ]
+  const sunsethueKey = readSecret("sunsethue")
+  if (sunsethueKey === null) report.sunsethue.outcome = "no-key"
+  else if (decideSunsethue(store.sunsethue, context(cached.sunEvents))) {
     tasks.push(
-      fetchSunEvents(sunsethueKey, queries).then(
-        async (events) => {
-          await saveSunEvents({ fetchedAt: now, value: events })
-          store.sunsethue = success(here, now)
-          report.sunsethue.outcome = "ok"
-        },
-        (error: unknown) => {
-          store.sunsethue = failure(store.sunsethue, now)
-          report.sunsethue.outcome = "failed"
-          report.sunsethue.error = message(error)
-        },
-      ),
+      run(report.sunsethue, async () => {
+        const events = await fetchSunEvents(sunsethueKey, sunQueries(here, now), limits.fetchSeconds)
+        await saveSunEvents({ fetchedAt: now, value: events })
+        store.sunsethue = sourceSuccess(here, now)
+      }).catch(() => {
+        store.sunsethue = sourceFailure(store.sunsethue, now)
+      }),
     )
   }
 
-  // DWD-Warnungen alle 30 Minuten
-  if (manual || decideWarnings(store.warnings, here, now)) {
+  if (decideWarnings(store.warnings, context(cached.alerts))) {
     tasks.push(
-      fetchAlerts(here).then(
-        async (alerts) => {
-          await saveAlerts({ fetchedAt: now, value: alerts })
-          store.warnings = success(here, now)
-          report.warnings.outcome = "ok"
-        },
-        (error: unknown) => {
-          store.warnings = failure(store.warnings, now)
-          report.warnings.outcome = "failed"
-          report.warnings.error = message(error)
-        },
-      ),
+      run(report.warnings, async () => {
+        const alerts = await fetchAlerts(here, limits.fetchSeconds)
+        await saveAlerts({ fetchedAt: now, value: alerts })
+        store.warnings = sourceSuccess(here, now)
+      }).catch(() => {
+        store.warnings = sourceFailure(store.warnings, now)
+      }),
     )
   }
 
@@ -141,26 +116,37 @@ export async function refresh(now: number, options: { manual?: boolean; inWidget
   return report
 }
 
-function success(location: Coordinates, now: number): SourceState {
-  return { lastSuccess: now, lastAttempt: now, lastAttemptOk: true, location }
+/** Alle Fehlermeldungen eines Berichts, für Status und Widget-Protokoll */
+export function reportErrors(report: RefreshReport): string[] {
+  const entries: [string, SourceReport][] = [
+    ["meteoblue", report.meteoblue],
+    ["Sunsethue", report.sunsethue],
+    ["DWD", report.warnings],
+  ]
+  return entries.flatMap(([name, source]) => (source.error === null ? [] : [`${name}: ${source.error}`]))
 }
 
-function failure(state: SourceState, now: number): SourceState {
-  return { ...state, lastAttempt: now, lastAttemptOk: false }
+/** Heute und morgen Auf- und Untergang, übermorgen der Untergang für die Tagesreihe */
+function sunQueries(here: Coordinates, now: number): SunEventQuery[] {
+  const today = localDateString(now)
+  const tomorrow = addDays(today, 1)
+  return [
+    { ...here, date: today, type: "sunrise" },
+    { ...here, date: today, type: "sunset" },
+    { ...here, date: tomorrow, type: "sunrise" },
+    { ...here, date: tomorrow, type: "sunset" },
+    { ...here, date: addDays(today, 2), type: "sunset" },
+  ]
 }
 
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: number | undefined
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms)
-  })
+/** Führt einen Abruf aus und trägt das Ergebnis in den Bericht ein. Wirft bei Fehler weiter. */
+async function run(report: SourceReport, task: () => Promise<void>): Promise<void> {
   try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    if (timer !== undefined) clearTimeout(timer)
+    await task()
+    report.outcome = "ok"
+  } catch (error) {
+    report.outcome = "failed"
+    report.error = redactApiKey(error instanceof Error ? error.message : String(error))
+    throw error
   }
 }

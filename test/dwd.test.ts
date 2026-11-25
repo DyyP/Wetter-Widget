@@ -27,7 +27,7 @@ describe("relevantAlerts", () => {
     const evening = Date.parse("2026-11-25T19:00:00+01:00")
     expect(relevantAlerts(alerts, evening).map((a) => a.event)).toEqual(["SCHWERES GEWITTER"])
     const dayBefore = Date.parse("2026-11-24T09:00:00+01:00")
-    expect(relevantAlerts(alerts, dayBefore, 3, 12)).toEqual([])
+    expect(relevantAlerts(alerts, dayBefore - 6 * 3_600_000)).toEqual([])
   })
 
   it("kann auch niedrigere Stufen liefern", () => {
@@ -50,6 +50,6 @@ describe("alertText", () => {
 
 describe("buildAlertsUrl", () => {
   it("baut die Bright-Sky-URL", () => {
-    expect(buildAlertsUrl(52.520008, 13.404954)).toBe("https://api.brightsky.dev/alerts?lat=52.52&lon=13.405")
+    expect(buildAlertsUrl({ lat: 52.520008, lon: 13.404954 })).toBe("https://api.brightsky.dev/alerts?lat=52.52&lon=13.405")
   })
 })

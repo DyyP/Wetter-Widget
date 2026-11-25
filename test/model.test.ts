@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Alert } from "../Wetter/core/dwd"
 import type { Forecast } from "../Wetter/core/meteoblue"
-import { buildModel, formatRain, meteoblueWeekUrl, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
+import { buildModel, formatRain, meteoblueWeekUrl, modelIconNames, roundTemperature, type HourSlot, type SunSlot } from "../Wetter/core/model"
 import type { SunEvent } from "../Wetter/core/sunsethue"
 
 // Testzeitzone Europe/Berlin, 25.11.2026 ist ein Mittwoch. Ort: Berlin.
@@ -14,7 +14,6 @@ function forecast(): Forecast {
     temperature: 6 - i * 0.1,
     feltTemperature: 3 - i * 0.1,
     precipitation: i === 17 ? 0.44 : i === 18 ? 0.04 : 0,
-    precipitationProbability: 20,
     pictocode: i === 16 ? 7 : 22,
     isDaylight: i >= 8 && i < 16,
   }))
@@ -25,26 +24,13 @@ function forecast(): Forecast {
       temperatureMax: 8.4 - i,
       temperatureMin: 1.6 - i,
       precipitation: i === 1 ? 4.24 : 0,
-      precipitationProbability: 50,
-      predictability: 70,
-      predictabilityClass: 4,
     }),
   )
-  return {
-    latitude: 52.52,
-    longitude: 13.405,
-    heightM: 43,
-    utcOffsetHours: 1,
-    timezoneAbbreviation: "CET",
-    modelRunUtc: null,
-    modelRunUpdateUtc: null,
-    hourly,
-    daily,
-  }
+  return { latitude: 52.52, longitude: 13.405, hourly, daily }
 }
 
 function sunset(date: string, time: number, quality: number): SunEvent {
-  return { type: "sunset", date, time, quality, qualityText: "Good", cloudCover: 0.3, direction: 240, goldenHour: null, blueHour: null, modelData: true }
+  return { type: "sunset", date, time, quality, qualityText: "Good" }
 }
 
 const base = { now: NOW, forecast: forecast(), fetchedAt: local(25, 12, 5), sunEvents: [] as SunEvent[], alerts: [] as Alert[] }
@@ -107,7 +93,7 @@ describe("Tage", () => {
 })
 
 describe("Warnung und Hinweise", () => {
-  const orkan: Alert = { id: "x", level: 4, event: "ORKANBÖEN", headline: "", onset: local(25, 14), expires: local(25, 18) }
+  const orkan: Alert = { level: 4, event: "ORKANBÖEN", onset: local(25, 14), expires: local(25, 18) }
 
   it("zeigt eine Unwetterwarnung ab Stufe 3", () => {
     expect(model({ alerts: [orkan] }).warning).toEqual({ text: "ORKANBÖEN bis 18:00", level: 4 })
@@ -117,6 +103,12 @@ describe("Warnung und Hinweise", () => {
   it("weist auf alte Daten hin", () => {
     expect(model().staleHint).toBeNull()
     expect(model({ fetchedAt: local(24, 17, 2) }).staleHint).toBe("Stand gestern 17:02")
+  })
+
+  it("listet die benötigten Icons", () => {
+    const m = model()
+    expect(modelIconNames(m)).toHaveLength(m.slots.length + m.days.length)
+    expect(modelIconNames(m)).toContain("01_iday.svg")
   })
 
   it("verlinkt die meteoblue-App und plant die nächste volle Stunde", () => {

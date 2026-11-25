@@ -1,6 +1,6 @@
 /** Einrichtung der API-Keys über Dialoge. Keys landen nur im Schlüsselbund. */
 
-import { maskSecret } from "../core/diagnostics"
+import { maskSecret } from "../core/format"
 import type { SecretName } from "../platform/secrets"
 import { deleteSecret, readSecret, saveSecret } from "../platform/secrets"
 

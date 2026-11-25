@@ -4,62 +4,41 @@ Mittleres Home-Bildschirm-Widget für die iOS-App [Scripting](https://apps.apple
 Es zeigt Wetterdaten von [meteoblue](https://www.meteoblue.com) mit den offiziellen meteoblue-Icons,
 die Sonnenuntergangs-Qualität von [Sunsethue](https://sunsethue.com) und amtliche DWD-Unwetterwarnungen.
 
-## Stand: Meilenstein 2 – Neubau mit deinem Look
-
 | Meilenstein | Inhalt | Status |
 |---|---|---|
-| M1 | Projektgerüst, API-Keys im Schlüsselbund, Test-Abruf mit Credit-Messung, Diagnose-Widget | erledigt |
-| M2 | Echtes Widget: Abruf-Planer, Sonnen-Slot, DWD-Warnungen, offizielle SVG-Icons | **aktuell** |
-| M3 | Look-Feinschliff mit Theme, Demo-Szenarien und Vorschau | geplant |
-| M4 | Extras nach Wahl | geplant |
+| M1 | Projektgerüst, Keys im Schlüsselbund, Kostenmessung | erledigt |
+| M2 | Widget im bisherigen Look mit Abruf-Planer, Sonnen-Slot und DWD-Warnungen | erledigt (0.2.5) |
+| M3 | Look-Feinschliff | als Nächstes |
 
-Was das Widget zeigt:
+## Was das Widget zeigt
 
-- **Stundenreihe:** JETZT plus die nächsten Stunden mit offiziellem meteoblue-Icon (Tag/Nacht), Temperatur, gefühlter Temperatur und Regen.
-- **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung.
-- **Tagesreihe:** HEUTE plus 4 Tage mit Tages-Icon, Max/Min und Regen. Ein farbiger Punkt zeigt die Sonnenuntergangs-Qualität für heute bis übermorgen.
-- **Warnzeile:** Sie erscheint nur bei amtlichen DWD-Unwettern ab Stufe 3 (rot) bzw. 4 (violett), mit Text und Uhrzeit.
-- **Antippen** öffnet die meteoblue-App an deinem Ort.
+- **Stundenreihe:** JETZT plus die nächsten Stunden mit meteoblue-Icon (Tag/Nacht), Temperatur, gefühlter Temperatur und Regen.
+- **Sonnen-Slot:** Sonnenauf- oder -untergang als eigene Spalte in der Zeitleiste. Er zeigt das Wetter-Icon dieser Stunde als Tag-Variante, die Qualität von Sunsethue in % und eine deutsche Bewertung. Ohne Sunsethue berechnet das Widget die Uhrzeit selbst.
+- **Tagesreihe:** HEUTE plus 4 Tage mit Icon, Max/Min und Regen. Für heute bis übermorgen gibt es einen Punkt in der Farbe der Sonnenuntergangs-Qualität.
+- **Warnzeile:** nur bei amtlichen DWD-Unwettern ab Stufe 3.
+- **Hinweis** „Stand …“, wenn die Daten älter als 12 Stunden sind.
+- **Antippen** öffnet die meteoblue-App am Ort der Daten.
 
-So bleibt es aktuell, ohne das Credit-Kontingent zu sprengen:
+## Wie es aktuell bleibt
 
-- **meteoblue:** Abruf um 06, 12 und 17 Uhr (jeweils beim ersten Widget-Durchlauf danach) und bei Ortswechsel über 5 km. Höchstens 23 Abrufe in 7 Tagen, das sind hochgerechnet 9,6 Mio. von 10 Mio. Credits pro Jahr.
-- **Dazwischen** rechnet das Widget jede volle Stunde aus den gespeicherten Stundenwerten neu. „JETZT“ stimmt also immer.
-- **Sunsethue** nach jedem seiner 6-Stunden-Updates, **DWD-Warnungen** alle 30 Minuten. Beides kostet keine meteoblue-Credits.
+- **meteoblue:** um 06, 12 und 17 Uhr (beim ersten Widget-Durchlauf danach) und bei Ortswechsel über 5 km. Höchstens 23 Abrufe in 7 Tagen, das sind hochgerechnet 9,6 Mio. der 10 Mio. Credits pro Jahr. Ein Abruf kostet laut Header `MB-Credits-Accounted` 8.000 Credits.
+- **Dazwischen:** Das Widget berechnet zu jeder vollen Stunde aus den gespeicherten Stundenwerten neu, „JETZT“ stimmt also immer.
+- **Sunsethue:** nach jedem seiner 6-Stunden-Updates.
+- **DWD-Warnungen:** alle 30 Minuten.
 
-## Installation auf dem iPhone
+## Einrichtung auf dem iPhone
 
-1. **Scripting** aus dem App Store installieren. Die kostenlose Version reicht.
-2. **Script aus GitHub holen.** Weg A ist der einfachste:
-   - **Weg A:** In Scripting ein neues Script namens `Wetter` anlegen. In seinen Einstellungen als Remote-Quelle eintragen:
-     `https://github.com/DyyP/Wetter-Widget/tree/widget/Wetter`
-     Dann jetzt aktualisieren und automatische Updates einschalten (z. B. stündlich).
-   - **Weg B:** Ein beliebiges neues Script anlegen, diesen Code in `index.tsx` einfügen und ausführen. Scripting importiert dann das Script.
-
-     ```tsx
-     import { Script } from "scripting"
-
-     async function main() {
-       const url = Script.createImportScriptsURLScheme([
-         "https://github.com/DyyP/Wetter-Widget/tree/widget/Wetter",
-       ])
-       await Safari.openURL(url)
-       Script.exit()
-     }
-
-     main()
-     ```
-3. **Script `Wetter` in der App starten** und im Menü:
-   1. **API-Keys einrichten:** meteoblue- und Sunsethue-Key eingeben. Sie werden nur im Schlüsselbund dieses iPhones gespeichert und nie ins Repo geschrieben.
-   2. **Jetzt aktualisieren:** holt einmal alle Daten und merkt sich deinen Standort. Danach arbeitet das Widget selbstständig.
-   3. **Widget-Vorschau:** zeigt das Widget direkt in der App.
-4. **Widget hinzufügen:** Home-Bildschirm lange drücken → `+` → Scripting → mittleres Widget. Dann das Widget lange drücken → *Widget bearbeiten* → Script `Wetter`.
+1. **Scripting** aus dem App Store installieren, die kostenlose Version reicht.
+2. In Scripting ein Script `Wetter` anlegen und in seinen Einstellungen als Remote-Quelle eintragen:
+   `https://github.com/DyyP/Wetter-Widget/tree/widget/Wetter`
+   Automatische Updates einschalten.
+3. Script `Wetter` starten:
+   - **API-Keys einrichten:** meteoblue- und Sunsethue-Key. Sie liegen nur im Schlüsselbund dieses iPhones.
+   - **Jetzt aktualisieren:** holt einmal alle Daten, merkt sich den Standort und rendert die 87 meteoblue-Icons als scharfe Bilder. Danach arbeitet das Widget selbstständig.
+4. **Widget hinzufügen:** Home-Bildschirm lange drücken → `+` → Scripting → mittleres Widget → *Widget bearbeiten* → Script `Wetter`. Parameter leer lassen, „Remote Updates“ aus.
 5. **Standort für Widgets erlauben:** iOS-Einstellungen → Datenschutz & Sicherheit → Ortungsdienste → Scripting → *Beim Verwenden der App oder Widgets*.
-6. **Diagnose:** Mit dem Widget-Parameter `diagnose` zeigt ein Widget stattdessen Keys, Standortfreigabe, Größe und den Aktualisierungs-Rhythmus. *Status anzeigen* im App-Menü zeigt zusätzlich die letzten Abrufe und das Budget.
 
-## Credits
-
-Laut der offiziellen [meteoblue-API-Referenz](https://my.meteoblue.com/packages/redoc) kostet ein Abruf von `basic-1h` und `basic-day` zusammen **8.000 Credits**. Es wird nur die teuerste Auflösung desselben Pakets berechnet. Die Free Weather API enthält 10 Mio. Credits pro Jahr, das sind rund 27.400 pro Tag oder etwa 3 Abrufe. Das Widget rechnet deshalb die aktuelle Stunde selbst aus den gespeicherten Stundenwerten und ruft nur nach Plan neu ab.
+**Status anzeigen** im Script zeigt Keys, letzte Abrufe, Budget und das Ergebnis des letzten Widget-Durchlaufs samt Fehlern.
 
 ## Entwicklung
 
@@ -68,12 +47,10 @@ npm ci
 npm run check
 ```
 
-`npm run check` führt die Typprüfung (TypeScript 7) und die Tests (Vitest) aus. CI macht dasselbe bei jedem Push.
-
-### Aufbau
+`npm run check` führt Typprüfung (TypeScript 7) und Tests (Vitest) aus, CI macht dasselbe bei jedem Push.
 
 ```text
-Wetter/                 Das Scripting-Script (Remote-Quelle für die App)
+Wetter/                 Das Scripting-Script (Remote-Quelle der App)
   script.json           Name, Version, Symbol
   index.tsx             App-Einstieg: Menü
   widget.tsx            Widget-Einstieg: auffrischen, Modell bauen, zeichnen
@@ -82,23 +59,26 @@ Wetter/                 Das Scripting-Script (Remote-Quelle für die App)
     sunsethue.ts        Sonnen-Qualität und Bewertung
     dwd.ts              DWD-Warnungen über Bright Sky
     sun.ts              Sonnenzeiten offline
-    planner.ts          Wann wird was abgerufen (Zeitfenster, Budget, Ortswechsel)
-    model.ts            Was das Widget zeigt (Slots, Tage, Warnzeile)
-  data/refresh.ts       Abruf-Ablauf für Widget und App
-  platform/             Dünne Hüllen um Scripting-APIs (Schlüsselbund, Dateien, Netz, Standort, Icons)
-  app/                  Abläufe in der App (Keys, Aktualisieren, Status, Diagnose)
-  ui/                   Widget-Ansichten (TSX) und theme.ts mit allen Design-Tokens
+    planner.ts          Wann wird was abgerufen
+    model.ts            Was das Widget zeigt
+    picto.ts            Namen der meteoblue-Icons
+    format.ts, geo.ts   Formatierung, Koordinaten, Kalendertage
+  data/refresh.ts       Abrufablauf für Widget und App
+  platform/             Dünne Hüllen um Scripting-APIs: Speicher, Netz, Ortung, Schlüsselbund, Icons
+  app/                  Menü, Keys, Aktualisieren, Status
+  ui/                   theme.ts (alle Design-Tokens) und die Widget-Ansicht
 test/                   Vitest-Tests für core/
-types/scripting.d.ts    Typen der genutzten Scripting-APIs (aus der Doku abgeleitet)
+types/scripting.d.ts    Typen der genutzten Scripting-APIs
 ```
 
 ### Regeln
 
 - **Keine Keys im Repo.** Das Repo ist öffentlich, Keys liegen nur im iOS-Schlüsselbund.
-- **Keine meteoblue-Icons im Repo.** Sie gehören meteoblue. Das Widget lädt sie zur Laufzeit von `static.meteoblue.com` und speichert sie auf dem iPhone.
-- **Kein Standort im Repo.** Testdaten nutzen öffentliche Orte (Berlin), nie echte Aufenthaltsorte.
-- **`core/` bleibt rein:** keine globalen Scripting-APIs, damit alles in Node testbar ist.
-- **Offizielle Typen:** Mit `npx scripting-cli start` auf einem Computer im selben WLAN schreibt die App ihre echten Typen nach `dts/`. `types/scripting.d.ts` ist bis dahin der Ersatz.
+- **Keine meteoblue-Icons im Repo.** Sie gehören meteoblue und werden auf dem iPhone geladen und gespeichert.
+- **Kein Standort im Repo.** Testdaten nutzen öffentliche Orte (Berlin).
+- **`core/` bleibt rein:** keine Scripting-APIs, damit alles in Node testbar ist.
+- **Im Widget keine SVGs:** Das Umrechnen sprengt das Speicherlimit des Widgets. SVGs rendert nur die App zu PNGs.
+- **Typen nur für Genutztes:** `types/scripting.d.ts` enthält nur, was der Code verwendet. Die offiziellen Typen schreibt `npx scripting-cli start` nach `dts/`.
 
 ### Branches
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dailyIconName, hourlyIconName, iconUrl, isDailyPictocode, isHourlyPictocode } from "../Wetter/core/picto"
+import { allIconNames, dailyIconName, hourlyIconName, iconUrl, isDailyPictocode, isHourlyPictocode } from "../Wetter/core/picto"
 
 describe("meteoblue-Pictogramme", () => {
   it("benennt Stunden- und Tages-Icons wie auf meteoblue.com", () => {
@@ -7,6 +7,12 @@ describe("meteoblue-Pictogramme", () => {
     expect(hourlyIconName(35, false)).toBe("35_night.svg")
     expect(dailyIconName(17)).toBe("17_iday.svg")
     expect(iconUrl("07_day.svg")).toBe("https://static.meteoblue.com/assets/images/picto/07_day.svg")
+  })
+
+  it("kennt alle 87 Icons", () => {
+    const names = allIconNames()
+    expect(names).toHaveLength(35 * 2 + 17)
+    expect(new Set(names).size).toBe(names.length)
   })
 
   it("prüft die Wertebereiche", () => {

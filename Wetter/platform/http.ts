@@ -1,33 +1,20 @@
-/** Netzwerkabruf mit Zeitlimit, Laufzeitmessung und allen Antwort-Headern. */
+/** Netzwerkabruf mit Zeitlimit. */
 
-/** Lädt eine Textdatei, z. B. ein SVG-Icon. Wirft bei HTTP-Fehlern. */
-export async function getText(url: string, timeoutSeconds = 10): Promise<string> {
-  const response = await fetch(url, { method: "GET", timeout: timeoutSeconds })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.text()
-}
-
-export interface HttpResult {
+export interface JsonResponse {
   status: number
   ok: boolean
   headers: [string, string][]
   /** Geparstes JSON oder null, wenn der Rumpf kein JSON ist */
   body: unknown
-  /** Roher Rumpf, z. B. zum Speichern einer Testantwort */
-  text: string
-  durationMs: number
 }
 
-export interface GetOptions {
-  timeoutSeconds?: number
-  label?: string
+export interface RequestOptions {
+  timeoutSeconds: number
   headers?: Record<string, string>
 }
 
-export async function getJson(url: string, options: GetOptions = {}): Promise<HttpResult> {
-  const started = Date.now()
-  const init: RequestInit = { method: "GET", timeout: options.timeoutSeconds ?? 15 }
-  if (options.label !== undefined) init.debugLabel = options.label
+export async function getJson(url: string, options: RequestOptions): Promise<JsonResponse> {
+  const init: RequestInit = { method: "GET", timeout: options.timeoutSeconds }
   if (options.headers !== undefined) init.headers = options.headers
   const response = await fetch(url, init)
   const text = await response.text()
@@ -37,12 +24,12 @@ export async function getJson(url: string, options: GetOptions = {}): Promise<Ht
   } catch {
     body = null
   }
-  return {
-    status: response.status,
-    ok: response.ok,
-    headers: response.headers.entries(),
-    body,
-    text,
-    durationMs: Date.now() - started,
-  }
+  return { status: response.status, ok: response.ok, headers: response.headers.entries(), body }
+}
+
+/** Lädt eine Textdatei. Wirft bei HTTP-Fehlern. */
+export async function getText(url: string, timeoutSeconds: number): Promise<string> {
+  const response = await fetch(url, { method: "GET", timeout: timeoutSeconds })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.text()
 }

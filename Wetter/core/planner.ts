@@ -1,10 +1,13 @@
 /**
- * Entscheidet bei jedem Widget-Durchlauf, welche Quellen neu abgerufen werden.
+ * Entscheidet bei jedem Widget-Durchlauf, welche Quelle neu abgerufen wird.
  * Anzeigen kostet nichts, Abrufe kosten Credits: Das Widget rechnet die
  * aktuelle Stunde aus dem Cache und ruft meteoblue nur nach Plan ab.
  */
 
 import { distanceKm, localDateString, type Coordinates } from "./geo"
+
+const MINUTE = 60_000
+const DAY = 86_400_000
 
 export interface SourceState {
   /** Letzter erfolgreicher Abruf, UTC in ms */
@@ -17,129 +20,136 @@ export interface SourceState {
 }
 
 export interface MeteoblueState extends SourceState {
-  /** Zeitpunkte abgerechneter Abrufe der letzten Tage, für das Budget */
+  /** Zeitpunkte abgerechneter Abrufe, für das Budget */
   billedCalls: number[]
 }
 
 export const EMPTY_SOURCE: SourceState = { lastSuccess: null, lastAttempt: null, lastAttemptOk: null, location: null }
 export const EMPTY_METEOBLUE: MeteoblueState = { ...EMPTY_SOURCE, billedCalls: [] }
 
-export interface MeteobluePlan {
-  /** Abrufzeiten in Ortszeit (volle Stunden) */
-  slotHours: number[]
-  /** Höchstzahl Abrufe in 7 Tagen. 23 ≈ 3,3 pro Tag = 9,6 Mio. Credits pro Jahr */
-  weeklyBudget: number
-  /** Harte Obergrenze pro Kalendertag, auch für Handabrufe */
-  dailyMax: number
-  /** Ab dieser Entfernung zum Ort der Daten wird neu abgerufen */
-  moveThresholdKm: number
-  /** Wartezeit nach einem fehlgeschlagenen Versuch */
-  retryMinutes: number
-  /** Ein planmäßiger Abruf entfällt, wenn der letzte so kurz zurückliegt */
-  minGapMinutes: number
+export interface Context {
+  now: number
+  /** Aktueller Ort, null wenn unbekannt */
+  here: Coordinates | null
+  /** Ob gespeicherte Daten dieser Quelle vorhanden sind */
+  hasData: boolean
+  /** Von Hand ausgelöst (App-Menü) */
+  manual: boolean
 }
 
-export const DEFAULT_METEOBLUE_PLAN: MeteobluePlan = {
+export const METEOBLUE_PLAN = {
+  /** Abrufzeiten in Ortszeit (volle Stunden) */
   slotHours: [6, 12, 17],
+  /** Höchstens 23 Abrufe in 7 Tagen ≈ 9,6 Mio. Credits pro Jahr (Free: 10 Mio.) */
   weeklyBudget: 23,
+  /** Harte Obergrenze pro Kalendertag, auch für Handabrufe */
   dailyMax: 6,
+  /** Ab dieser Entfernung zum Ort der Daten wird neu abgerufen */
   moveThresholdKm: 5,
+  /** Wartezeit nach einem Fehlversuch */
   retryMinutes: 20,
+  /** Ein planmäßiger Abruf entfällt, wenn der letzte so kurz zurückliegt */
   minGapMinutes: 60,
-}
+} as const
 
 export type MeteoblueDecision =
   | { fetch: true; reason: "no-data" | "moved" | "slot" | "manual" }
   | { fetch: false; reason: "up-to-date" | "budget" | "retry-wait" | "daily-max" }
 
-export function decideMeteoblue(
-  state: MeteoblueState,
-  here: Coordinates | null,
-  now: number,
-  plan: MeteobluePlan = DEFAULT_METEOBLUE_PLAN,
-  manual = false,
-): MeteoblueDecision {
-  const weekCalls = state.billedCalls.filter((t) => t > now - 7 * 86_400_000 && t <= now).length
-  const today = localDateString(now)
-  const todayCalls = state.billedCalls.filter((t) => localDateString(t) === today).length
-  if (todayCalls >= plan.dailyMax) return { fetch: false, reason: "daily-max" }
-  if (manual) return { fetch: true, reason: "manual" }
-  if (inRetryWait(state, now, plan.retryMinutes)) return { fetch: false, reason: "retry-wait" }
-
+export function decideMeteoblue(state: MeteoblueState, ctx: Context): MeteoblueDecision {
+  const plan = METEOBLUE_PLAN
+  const today = localDateString(ctx.now)
+  if (state.billedCalls.filter((t) => localDateString(t) === today).length >= plan.dailyMax) {
+    return { fetch: false, reason: "daily-max" }
+  }
+  if (ctx.manual) return { fetch: true, reason: "manual" }
+  if (inRetryWait(state, ctx.now, plan.retryMinutes)) return { fetch: false, reason: "retry-wait" }
   // Ohne Daten wird immer abgerufen, sonst bliebe das Widget leer.
-  if (state.lastSuccess === null) return { fetch: true, reason: "no-data" }
+  if (!ctx.hasData || state.lastSuccess === null) return { fetch: true, reason: "no-data" }
 
-  const budgetLeft = weekCalls < plan.weeklyBudget
-  const moved = here !== null && state.location !== null && distanceKm(here, state.location) > plan.moveThresholdKm
-  if (moved) return budgetLeft ? { fetch: true, reason: "moved" } : { fetch: false, reason: "budget" }
-
-  const slot = lastSlotStart(now, plan.slotHours)
-  const due = state.lastSuccess < slot && state.lastSuccess < now - plan.minGapMinutes * 60_000
+  const budgetLeft = state.billedCalls.filter((t) => t > ctx.now - 7 * DAY && t <= ctx.now).length < plan.weeklyBudget
+  if (movedFrom(state, ctx.here, plan.moveThresholdKm)) {
+    return budgetLeft ? { fetch: true, reason: "moved" } : { fetch: false, reason: "budget" }
+  }
+  const due =
+    state.lastSuccess < lastSlotStart(ctx.now, plan.slotHours) && state.lastSuccess < ctx.now - plan.minGapMinutes * MINUTE
   if (due) return budgetLeft ? { fetch: true, reason: "slot" } : { fetch: false, reason: "budget" }
-
   return { fetch: false, reason: "up-to-date" }
 }
 
-/** Beginn des letzten Abruf-Zeitfensters (Ortszeit des Geräts) vor `now`. */
-export function lastSlotStart(now: number, slotHours: number[]): number {
-  const hours = [...slotHours].sort((a, b) => a - b)
+/** Neuer Zustand nach einem erfolgreichen meteoblue-Abruf (Abrufe älter als 8 Tage fallen weg). */
+export function meteoblueSuccess(state: MeteoblueState, here: Coordinates, now: number): MeteoblueState {
+  return { ...sourceSuccess(here, now), billedCalls: [...state.billedCalls.filter((t) => t > now - 8 * DAY), now] }
+}
+
+/** Beginn des letzten Abruf-Zeitfensters vor `now` (Ortszeit des Geräts). */
+export function lastSlotStart(now: number, slotHours: readonly number[]): number {
+  const hours = [...slotHours].sort((a, b) => b - a)
   const base = new Date(now)
-  for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
-    for (let i = hours.length - 1; i >= 0; i--) {
-      const hour = hours[i] ?? 0
+  for (const dayOffset of [0, 1]) {
+    for (const hour of hours) {
       const start = new Date(base.getFullYear(), base.getMonth(), base.getDate() - dayOffset, hour).getTime()
       if (start <= now) return start
     }
   }
-  return now - 86_400_000
-}
-
-/** Behält nur Abrufe der letzten 8 Tage im Zustand. */
-export function pruneCalls(calls: number[], now: number): number[] {
-  return calls.filter((t) => t > now - 8 * 86_400_000)
+  return now - DAY
 }
 
 /**
  * Sunsethue rechnet laut Doku alle 6 Stunden neu (etwa 05:30, 10:30, 16:30
- * und 22:30 UTC). Abgerufen wird nach jedem dieser Updates, bei neuem
- * Kalendertag oder Ortswechsel. Credits reichen dafür reichlich.
+ * und 22:30 UTC). Abgerufen wird nach jedem Update, an einem neuen Tag und
+ * bei Ortswechsel. Die Sunsethue-Credits reichen dafür reichlich.
  */
-export const SUNSETHUE_UPDATES_UTC: [number, number][] = [
+const SUNSETHUE_UPDATES_UTC: readonly (readonly [number, number])[] = [
   [5, 30],
   [10, 30],
   [16, 30],
   [22, 30],
 ]
+/** Puffer, bis ein neues Sunsethue-Update sicher verfügbar ist */
+const SUNSETHUE_DELAY_MINUTES = 20
 
-export function decideSunsethue(state: SourceState, here: Coordinates | null, now: number): boolean {
-  if (inRetryWait(state, now, 30)) return false
-  if (state.lastSuccess === null) return true
-  if (localDateString(state.lastSuccess) !== localDateString(now)) return true
-  if (here !== null && state.location !== null && distanceKm(here, state.location) > 10) return true
-  // 20 Minuten Puffer, bis das neue Sunsethue-Update sicher verfügbar ist
-  return state.lastSuccess < lastUtcUpdate(now - 20 * 60_000, SUNSETHUE_UPDATES_UTC)
+export function decideSunsethue(state: SourceState, ctx: Context): boolean {
+  if (ctx.manual) return true
+  if (inRetryWait(state, ctx.now, 30)) return false
+  if (!ctx.hasData || state.lastSuccess === null) return true
+  if (localDateString(state.lastSuccess) !== localDateString(ctx.now)) return true
+  if (movedFrom(state, ctx.here, 10)) return true
+  return state.lastSuccess < lastUtcUpdate(ctx.now - SUNSETHUE_DELAY_MINUTES * MINUTE)
 }
 
-function lastUtcUpdate(time: number, updates: [number, number][]): number {
+/** DWD-Warnungen sind kostenlos: alle 30 Minuten und bei Ortswechsel. */
+export function decideWarnings(state: SourceState, ctx: Context): boolean {
+  if (ctx.manual) return true
+  if (inRetryWait(state, ctx.now, 10)) return false
+  if (!ctx.hasData || state.lastSuccess === null) return true
+  return movedFrom(state, ctx.here, 5) || ctx.now - state.lastSuccess >= 30 * MINUTE
+}
+
+export function sourceSuccess(here: Coordinates, now: number): SourceState {
+  return { lastSuccess: now, lastAttempt: now, lastAttemptOk: true, location: here }
+}
+
+export function sourceFailure<S extends SourceState>(state: S, now: number): S {
+  return { ...state, lastAttempt: now, lastAttemptOk: false }
+}
+
+function lastUtcUpdate(time: number): number {
   const d = new Date(time)
-  let best = Number.NEGATIVE_INFINITY
-  for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
-    for (const [h, m] of updates) {
+  let latest = Number.NEGATIVE_INFINITY
+  for (const dayOffset of [0, 1]) {
+    for (const [h, m] of SUNSETHUE_UPDATES_UTC) {
       const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dayOffset, h, m)
-      if (t <= time && t > best) best = t
+      if (t <= time && t > latest) latest = t
     }
   }
-  return best
+  return latest
 }
 
-/** DWD-Warnungen: kostenlos, deshalb alle 30 Minuten und bei Ortswechsel. */
-export function decideWarnings(state: SourceState, here: Coordinates | null, now: number): boolean {
-  if (inRetryWait(state, now, 10)) return false
-  if (state.lastSuccess === null) return true
-  if (here !== null && state.location !== null && distanceKm(here, state.location) > 5) return true
-  return now - state.lastSuccess >= 30 * 60_000
+function movedFrom(state: SourceState, here: Coordinates | null, thresholdKm: number): boolean {
+  return here !== null && state.location !== null && distanceKm(here, state.location) > thresholdKm
 }
 
 function inRetryWait(state: SourceState, now: number, minutes: number): boolean {
-  return state.lastAttemptOk === false && state.lastAttempt !== null && now - state.lastAttempt < minutes * 60_000
+  return state.lastAttemptOk === false && state.lastAttempt !== null && now - state.lastAttempt < minutes * MINUTE
 }

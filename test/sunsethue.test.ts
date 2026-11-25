@@ -38,18 +38,13 @@ describe("parseEvent", () => {
       time: Date.UTC(2026, 1, 22, 17, 32),
       quality: 0.45,
       qualityText: "Good",
-      cloudCover: 0.32,
-      direction: 256.7,
-      goldenHour: [Date.UTC(2026, 1, 22, 17, 17), Date.UTC(2026, 1, 22, 17, 49)],
-      blueHour: [Date.UTC(2026, 1, 22, 17, 55), Date.UTC(2026, 1, 22, 18, 7)],
-      modelData: true,
     })
   })
 
   it("akzeptiert fehlende Qualität ohne Modelldaten", () => {
     const event = parseEvent({ data: { type: "sunrise", model_data: false } }, { date: "2026-02-23", type: "sunrise" })
     expect(event.quality).toBeNull()
-    expect(event.modelData).toBe(false)
+    expect(event.time).toBeNull()
   })
 
   it("lehnt falsche Typen und leere Antworten ab", () => {
@@ -74,10 +69,10 @@ describe("Bewertung", () => {
 })
 
 describe("errorFromSunsethue", () => {
-  it("erkennt das Tageslimit", () => {
-    const error = errorFromSunsethue(400, { status: 400, code: 204, message: "Exceeded daily quota" })
-    expect(error.quota).toBe(true)
-    expect(error.message).toBe("Exceeded daily quota")
-    expect(errorFromSunsethue(401, null).quota).toBe(false)
+  it("übernimmt die Meldung der API", () => {
+    expect(errorFromSunsethue(400, { status: 400, code: 204, message: "Exceeded daily quota" }).message).toBe(
+      "Sunsethue: Exceeded daily quota",
+    )
+    expect(errorFromSunsethue(401, null).message).toBe("Sunsethue: HTTP 401")
   })
 })

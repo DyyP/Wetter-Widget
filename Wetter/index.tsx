@@ -1,4 +1,4 @@
-/** App-Einstieg: startet das Menü für Einrichtung und Diagnose. */
+/** App-Einstieg: Menü für Vorschau, Aktualisieren, Status und Keys. */
 
 import { Script } from "scripting"
 import { runMenu } from "./app/menu"

@@ -8,7 +8,6 @@
 import type { WarningLevel } from "../core/dwd"
 import type { QualityLevel } from "../core/sunsethue"
 
-// Ohne `satisfies`: Scriptings TypeScript-Übersetzer muss nicht die neueste Syntax kennen.
 const quality: Record<QualityLevel, string> = {
   high: "#ff9f0a",
   medium: "#ffd60a",
@@ -35,10 +34,12 @@ export const theme = {
     warning,
   },
   layout: {
-    /** Breite einer Stunden-Spalte, 6 Spalten = 312 pt */
-    hourColumnWidth: 52,
-    /** A: Tage teilen sich dieselbe Gesamtbreite wie die Stunden */
-    dayColumnWidth: (52 * 6) / 5,
+    /** Gesamtbreite beider Reihen (A: bündiges Raster) */
+    rowWidth: 312,
+    /** 6 Spalten à 52 pt */
+    hourColumnWidth: 312 / 6,
+    /** 5 Spalten à 62,4 pt */
+    dayColumnWidth: 312 / 5,
     hourIconWidth: 36,
     dayIconWidth: 30,
     slotCornerRadius: 8,
