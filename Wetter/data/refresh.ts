@@ -17,7 +17,7 @@ import {
 } from "../core/planner"
 import type { SunEventQuery } from "../core/sunsethue"
 import { loadPlanner, saveAlerts, saveForecast, savePlanner, saveSunEvents } from "../platform/cache"
-import { currentCoordinates } from "../platform/location"
+import { currentCoordinates, widgetLocationAllowed } from "../platform/location"
 import { readSecret } from "../platform/secrets"
 import { fetchAlerts, fetchForecast, fetchSunEvents } from "../platform/sources"
 
@@ -35,11 +35,13 @@ export interface RefreshReport {
 /** Standortabfrage im Widget darf nicht ewig dauern. */
 const LOCATION_TIMEOUT_MS = 6000
 
-export async function refresh(now: number, options: { manual?: boolean } = {}): Promise<RefreshReport> {
+export async function refresh(now: number, options: { manual?: boolean; inWidget?: boolean } = {}): Promise<RefreshReport> {
   const manual = options.manual ?? false
   const store = await loadPlanner()
 
-  const fresh = await withTimeout(currentCoordinates(), LOCATION_TIMEOUT_MS)
+  // Im Widget nur orten, wenn iOS es erlaubt, und nur kurz warten.
+  const mayLocate = !options.inWidget || widgetLocationAllowed() === true
+  const fresh = mayLocate ? await withTimeout(currentCoordinates(), options.inWidget ? 3000 : LOCATION_TIMEOUT_MS) : null
   const here = fresh === null ? store.lastLocation : { lat: roundCoordinate(fresh.lat), lon: roundCoordinate(fresh.lon) }
   if (fresh !== null && here !== null) store.lastLocation = here
 
@@ -151,7 +153,7 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   let timer: number | undefined
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), ms)

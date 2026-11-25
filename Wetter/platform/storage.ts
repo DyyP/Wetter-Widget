@@ -10,6 +10,7 @@ export const sharedDirectory = `${FileManager.appGroupDocumentsDirectory}/wetter
 export const sharedFiles = {
   renderLog: `${sharedDirectory}/render-log.txt`,
   lastProbe: `${sharedDirectory}/last-probe.json`,
+  widgetTrace: `${sharedDirectory}/widget-trace.json`,
 } as const
 
 /** Ordner für Dateien, die du in der Dateien-App öffnen oder teilen kannst. */

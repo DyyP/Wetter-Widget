@@ -1,6 +1,6 @@
 {
   "name": "wetter-widget",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Wetter-Widget für die iOS-App Scripting mit meteoblue, Sunsethue und DWD-Warnungen",
   "type": "module",

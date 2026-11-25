@@ -9,18 +9,30 @@ import type { ProbeSummary } from "./core/diagnostics"
 import { probeLine, summarizeRenders } from "./core/diagnostics"
 import { formatClock, formatMinutes } from "./core/format"
 import { buildModel, type WidgetModel } from "./core/model"
-import { refresh } from "./data/refresh"
+import { refresh, withTimeout } from "./data/refresh"
 import { loadAlerts, loadForecast, loadSunEvents } from "./platform/cache"
 import { ensureIcons, iconPath } from "./platform/icons"
 import { widgetLocationAllowed } from "./platform/location"
 import { recordRender } from "./platform/renderlog"
 import { readSecret } from "./platform/secrets"
-import { readJson, sharedFiles } from "./platform/storage"
+import { readJson, sharedFiles, writeJson } from "./platform/storage"
 import { DiagnosticsWidget } from "./ui/DiagnosticsWidget"
 import { MessageWidget, WeatherWidget } from "./ui/WeatherWidget"
 
+/** Protokoll des letzten Widget-Durchlaufs, sichtbar unter „Status“ in der App */
+const trace: { time: number; step: string }[] = []
+function step(name: string): Promise<void> {
+  trace.push({ time: Date.now(), step: name })
+  return writeJson(sharedFiles.widgetTrace, { steps: trace }).catch(() => undefined)
+}
+
+/** iOS gibt Widgets nur wenige Sekunden. Abrufe bekommen höchstens so lange. */
+const REFRESH_BUDGET_MS = 8000
+const ICON_BUDGET_MS = 4000
+
 async function main(): Promise<void> {
   const now = Date.now()
+  await step("start")
   const size = Widget.displaySize
   // Protokoll zuerst: Nach Widget.present() läuft kein Code mehr.
   const renders = await recordRender({ time: now, family: Widget.family, width: size.width, height: size.height })
@@ -30,10 +42,13 @@ async function main(): Promise<void> {
     return
   }
 
+  await step("refresh")
   try {
-    await refresh(now)
-  } catch {
+    const report = await withTimeout(refresh(now, { inWidget: true }), REFRESH_BUDGET_MS)
+    await step(report === null ? "refresh: Zeitlimit" : "refresh: fertig")
+  } catch (error) {
     // Abruffehler sind kein Grund, nichts zu zeigen: Der Cache reicht.
+    await step(`refresh: Fehler ${error instanceof Error ? error.message : String(error)}`)
   }
 
   const [forecast, sunEvents, alerts] = await Promise.all([loadForecast(), loadSunEvents(), loadAlerts()])
@@ -45,6 +60,7 @@ async function main(): Promise<void> {
     alerts: alerts?.value ?? [],
   })
 
+  await step(`modell: ${result.ok ? "ok" : result.reason}`)
   if (!result.ok) {
     const keyMissing = readSecret("meteoblue") === null
     Widget.present(
@@ -63,7 +79,9 @@ async function main(): Promise<void> {
     return
   }
 
-  const available = await ensureIcons(iconNames(result.model))
+  await step("icons")
+  const available = (await withTimeout(ensureIcons(iconNames(result.model)), ICON_BUDGET_MS)) ?? new Set<string>()
+  await step(`zeichnen (${available.size} Icons)`)
   Widget.present(<WeatherWidget model={result.model} icons={{ available, path: iconPath }} />, {
     policy: "after",
     // Kurz nach der vollen Stunde, damit „JETZT“ weiterrückt

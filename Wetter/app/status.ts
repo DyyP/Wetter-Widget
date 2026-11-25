@@ -6,6 +6,8 @@ import { DEFAULT_METEOBLUE_PLAN, type SourceState } from "../core/planner"
 import { loadPlanner } from "../platform/cache"
 import { readRenders } from "../platform/renderlog"
 import { readSecret } from "../platform/secrets"
+import { readJson, sharedFiles } from "../platform/storage"
+import { formatClock } from "../core/format"
 
 export async function showStatus(): Promise<void> {
   const now = Date.now()
@@ -30,6 +32,11 @@ export async function showStatus(): Promise<void> {
     if (renders.medianGapMinutes !== null && renders.maxGapMinutes !== null) {
       lines.push(`Abstand typisch ${formatMinutes(renders.medianGapMinutes)}, längste Pause ${formatMinutes(renders.maxGapMinutes)}`)
     }
+  }
+  const trace = await readJson<{ steps: { time: number; step: string }[] }>(sharedFiles.widgetTrace)
+  if (trace !== null && trace.steps.length > 0) {
+    lines.push("", "Letzter Widget-Durchlauf:")
+    for (const s of trace.steps) lines.push(`${formatClock(s.time)} ${s.step}`)
   }
   await Dialog.alert({ title: "Status", message: lines.join("\n") })
 }
