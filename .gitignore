@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+# scripting-cli: lokale Typen und Konfiguration vom iPhone
+dts/
+scripting.config.*
+.DS_Store

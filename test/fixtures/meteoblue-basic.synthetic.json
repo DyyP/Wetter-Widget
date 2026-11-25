@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "name": "",
+    "latitude": 52.52,
+    "longitude": 13.405,
+    "height": 43,
+    "timezone_abbrevation": "CET",
+    "utc_timeoffset": 1,
+    "modelrun_utc": "2026-11-25 00:00",
+    "modelrun_updatetime_utc": "2026-11-25 05:43",
+    "generation_time_ms": 12.3
+  },
+  "units": {
+    "time": "YYYY-MM-DD hh:mm",
+    "precipitation_probability": "percent",
+    "precipitation": "mm",
+    "predictability": "percent",
+    "temperature": "C",
+    "windspeed": "km/h"
+  },
+  "data_1h": {
+    "time": ["2026-11-25 14:00", "2026-11-25 15:00", "2026-11-25 16:00", "2026-11-25 17:00"],
+    "temperature": [6.8, 6.4, 5.9, 5.1],
+    "felttemperature": [3.9, 3.5, 2.8, 1.9],
+    "precipitation": [0, 0, 0.2, 0.6],
+    "precipitation_probability": [5, 10, 35, 60],
+    "pictocode": [4, 7, 19, 33],
+    "isdaylight": [1, 1, 0, 0],
+    "snowfraction": [0, 0, 0, 0],
+    "uvindex": [1, 0, 0, 0],
+    "windspeed": [11, 12, 14, 15],
+    "winddirection": [240, 245, 250, 255],
+    "relativehumidity": [78, 80, 84, 88],
+    "sealevelpressure": [1012, 1012, 1011, 1011],
+    "convective_precipitation": [0, 0, 0, 0],
+    "rainspot": ["0000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000000", "0000000000000000000000000000000000000000000000019", "0000000000000000000000000000000000000000000001129"]
+  },
+  "data_day": {
+    "time": ["2026-11-25", "2026-11-26"],
+    "pictocode": [3, 6],
+    "temperature_max": [8.1, 9.4],
+    "temperature_min": [1.7, 3.6],
+    "precipitation": [0.8, 4.2],
+    "precipitation_probability": [70, 90],
+    "predictability": [82, 61],
+    "predictability_class": [5, 4],
+    "uvindex": [1, 1]
+  }
+}
