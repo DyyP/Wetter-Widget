@@ -1,0 +1,21 @@
+{
+  "name": "wetter-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wetter-Widget für die iOS-App Scripting mit meteoblue, Sunsethue und DWD-Warnungen",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}
