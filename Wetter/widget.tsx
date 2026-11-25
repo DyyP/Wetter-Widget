@@ -11,7 +11,7 @@ import { formatClock, formatMinutes } from "./core/format"
 import { buildModel, type WidgetModel } from "./core/model"
 import { refresh, withTimeout } from "./data/refresh"
 import { loadAlerts, loadForecast, loadSunEvents } from "./platform/cache"
-import { ensureIcons, iconPath } from "./platform/icons"
+import { widgetIconPaths } from "./platform/icons"
 import { widgetLocationAllowed } from "./platform/location"
 import { recordRender } from "./platform/renderlog"
 import { readSecret } from "./platform/secrets"
@@ -80,22 +80,9 @@ async function main(): Promise<void> {
   }
 
   await step("icons")
-  // Testparameter: "png" = meteoblue-PNGs statt SVG, "ohne-icons" = gar keine Icons
-  const parameter = Widget.parameter.trim().toLowerCase()
-  const mode = parameter === "png" ? "png" : parameter === "ohne-icons" ? "none" : "svg"
-  const names = iconNames(result.model).map((n) => (mode === "png" ? n.replace(/\.svg$/, ".png") : n))
-  const available =
-    mode === "none" ? new Set<string>() : ((await withTimeout(ensureIcons(names), ICON_BUDGET_MS)) ?? new Set<string>())
-  await step(`zeichnen (${mode}, ${available.size} Icons)`)
-  const model =
-    mode === "png"
-      ? {
-          ...result.model,
-          slots: result.model.slots.map((sl) => ({ ...sl, icon: sl.icon.replace(/\.svg$/, ".png") })),
-          days: result.model.days.map((d) => ({ ...d, icon: d.icon.replace(/\.svg$/, ".png") })),
-        }
-      : result.model
-  Widget.present(<WeatherWidget model={model} icons={{ available, path: iconPath, mode }} />, {
+  const paths = (await withTimeout(widgetIconPaths(iconNames(result.model)), ICON_BUDGET_MS)) ?? new Map<string, string>()
+  await step(`zeichnen (${paths.size} Icons)`)
+  Widget.present(<WeatherWidget model={result.model} icons={{ paths }} />, {
     policy: "after",
     // Kurz nach der vollen Stunde, damit „JETZT“ weiterrückt
     date: new Date(result.model.nextRefresh + 60_000),

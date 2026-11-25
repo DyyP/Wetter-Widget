@@ -3,6 +3,7 @@
 import { Widget } from "scripting"
 import { formatThousands } from "../core/format"
 import { refresh, type RefreshReport, type SourceOutcome } from "../data/refresh"
+import { allIconNames, prepareIcons } from "../platform/icons"
 
 export async function refreshNow(): Promise<void> {
   const confirmed = await Dialog.confirm({
@@ -13,8 +14,12 @@ export async function refreshNow(): Promise<void> {
   })
   if (!confirmed) return
   const report = await refresh(Date.now(), { manual: true })
+  const icons = await prepareIcons()
   Widget.reloadAll()
-  await Dialog.alert({ title: "Aktualisiert", message: describe(report) })
+  await Dialog.alert({
+    title: "Aktualisiert",
+    message: `${describe(report)}\nIcons: ${icons} von ${allIconNames().length} bereit`,
+  })
 }
 
 export function describe(report: RefreshReport): string {

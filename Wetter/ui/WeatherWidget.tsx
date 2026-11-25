@@ -1,6 +1,6 @@
 /** Das mittlere Wetter-Widget im Look deines bisherigen Scripts. */
 
-import { Circle, HStack, Image, SVG, Spacer, Text, VStack } from "scripting"
+import { Circle, HStack, Image, Spacer, Text, VStack } from "scripting"
 import type { DayColumn, HourSlot, Slot, SunSlot, WarningRow, WidgetModel } from "../core/model"
 import { PICTO_ASPECT } from "../core/picto"
 import { theme } from "./theme"
@@ -9,22 +9,15 @@ const { colors, layout, fonts } = theme
 const DEG = "°"
 
 export interface IconSource {
-  /** Namen der Icons, die lokal vorliegen */
-  available: Set<string>
-  path: (name: string) => string
-  /** Testmodus: "svg" (Standard), "png" (meteoblue-PNG) oder "none" (ohne Icons) */
-  mode?: "svg" | "png" | "none"
+  /** Icon-Name → Pfad eines zeichenbaren PNG */
+  paths: Map<string, string>
 }
 
 function PictoIcon(props: { name: string; width: number; icons: IconSource }) {
   const height = Math.round(props.width * PICTO_ASPECT * 10) / 10
-  const mode = props.icons.mode ?? "svg"
-  if (mode === "none" || !props.icons.available.has(props.name)) return <VStack frame={{ width: props.width, height }} />
-  if (mode === "png") {
-    return <Image filePath={props.icons.path(props.name)} resizable frame={{ width: props.width, height }} />
-  }
-  // Ohne höchste Interpolation und Antialiasing: spart Speicher beim Umrechnen
-  return <SVG filePath={props.icons.path(props.name)} resizable frame={{ width: props.width, height }} />
+  const path = props.icons.paths.get(props.name)
+  if (path === undefined) return <VStack frame={{ width: props.width, height }} />
+  return <Image filePath={path} resizable frame={{ width: props.width, height }} />
 }
 
 function slotBackground(color: string) {

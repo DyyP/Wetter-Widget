@@ -174,6 +174,11 @@ declare module "scripting" {
     static reloadUserWidgets(): Promise<void> | void
   }
 
+  /** Zeichnet eine Ansicht in der App zu einem Bild (nicht im Widget) */
+  class ImageRenderer {
+    static toUIImage(element: VirtualNode, options?: { scale?: number; opaque?: boolean }): Promise<UIImage>
+  }
+
   class Script {
     static readonly name: string
     static readonly directory: string
@@ -284,6 +289,12 @@ declare namespace Safari {
 }
 
 // --- fetch (Scripting-Variante des Web-Standards) ---------------------------
+
+declare class UIImage {
+  readonly width: number
+  readonly height: number
+  toPNGData(): Data | null
+}
 
 /** Binärdaten in Scripting */
 declare class Data {
